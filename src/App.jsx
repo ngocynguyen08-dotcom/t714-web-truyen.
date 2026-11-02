@@ -245,18 +245,61 @@ export default function App() {
   };
 
   const handleAddSaoSongTu = (bookId, chapterId) => {
-    setBooks(books.map(b => {
+    if (!currentUser) {
+      showMsg("Vui lòng đăng nhập để tặng sao!");
+      return;
+    }
+
+    let alreadyLiked = false;
+
+    const updatedBooks = books.map(b => {
       if (b.id === bookId) {
+        const updatedChapters = b.chapters.map(c => {
+          if (c.id === chapterId) {
+            // Khởi tạo mảng likedBy nếu chương này chưa có ai like
+            const likedBy = c.likedBy || [];
+            
+            // Kiểm tra xem user này đã thả sao chưa
+            if (likedBy.includes(currentUser.username)) {
+              alreadyLiked = true;
+              return c; // Đã like rồi thì giữ nguyên không đổi
+            }
+            
+            // Nếu chưa like thì tăng 1 sao và thêm tên user vào danh sách
+            return { 
+              ...c, 
+              sao: (c.sao || 0) + 1, 
+              likedBy: [...likedBy, currentUser.username] 
+            };
+          }
+          return c;
+        });
+
+        // Nếu đã like rồi thì không tăng sao của truyện nữa
+        if (alreadyLiked) return b;
+
         return {
           ...b,
           sao: (b.sao || 0) + 1,
-          chapters: b.chapters.map(c => c.id === chapterId ? { ...c, sao: (c.sao || 0) + 1 } : c)
+          chapters: updatedChapters
         };
       }
       return b;
-    }));
-  };
+    });
 
+    if (alreadyLiked) {
+      showMsg("Bạn đã tặng sao cho chương này rồi!");
+      return;
+    }
+
+    // Cập nhật lại kho truyện
+    setBooks(updatedBooks);
+    
+    // RẤT QUAN TRỌNG: Cập nhật luôn truyện đang đọc để số sao nhảy ngay lập tức trên màn hình
+    setSelectedBook(updatedBooks.find(b => b.id === bookId));
+    
+    showMsg("Cảm ơn bạn đã tặng sao ủng hộ tác giả!");
+  };
   const increaseView = (bookId, chapterId) => {
     setBooks(prev => prev.map(b => {
       if (b.id === bookId) {
