@@ -55,6 +55,11 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authForm, setAuthForm] = useState({ username: '', password: '', role: 'Reader' });
   
+  // Change Password State
+  const [showChangePass, setShowChangePass] = useState(false);
+  const [changePassForm, setChangePassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
+  const [changePassMsg, setChangePassMsg] = useState({ type: '', text: '' });
+  
   // Khởi tạo CurrentUser & DB từ LocalStorage
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('t714_current_user');
@@ -122,7 +127,7 @@ export default function App() {
 
   const userRole = currentUser ? currentUser.role : 'Guest';
 
-  // ================= AUTH LOGIC (SỬA LỖI ADMIN & LƯU TK) =================
+  // ================= AUTH LOGIC =================
   const handleAuthSubmit = (e) => {
     e.preventDefault();
     setAuthError('');
@@ -142,13 +147,11 @@ export default function App() {
         setAuthError('Tên đăng nhập hoặc mật khẩu không đúng!');
       }
     } else {
-      // ĐĂNG KÝ MỚI
       if (usersDb.some(u => u.username.toLowerCase() === inputName.toLowerCase())) {
         setAuthError('Tên người dùng này đã tồn tại!');
         return;
       }
       
-      // Tạo user mới với đúng role (Mặc định Reader/Author, KHÔNG BAO GIỜ tự lên Admin)
       const newUser = { 
         username: inputName, 
         password: authForm.password, 
@@ -157,7 +160,7 @@ export default function App() {
       };
       
       setUsersDb(prev => [...prev, newUser]);
-      setCurrentUser(newUser); // Đăng nhập luôn bằng nick vừa tạo
+      setCurrentUser(newUser); 
       setShowAuthModal(false);
       showMsg("Đăng ký tài khoản thành công!");
     }
@@ -168,6 +171,39 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('t714_current_user');
     showMsg("Đã đăng xuất tài khoản.");
+  };
+
+  const handleChangePassword = (e) => {
+    e.preventDefault();
+    if (!changePassForm.oldPass || !changePassForm.newPass || !changePassForm.confirmPass) {
+      setChangePassMsg({ type: 'error', text: 'Vui lòng điền đầy đủ thông tin.' });
+      return;
+    }
+    if (changePassForm.oldPass !== currentUser.password) {
+      setChangePassMsg({ type: 'error', text: 'Mật khẩu cũ không chính xác.' });
+      return;
+    }
+    if (changePassForm.newPass !== changePassForm.confirmPass) {
+      setChangePassMsg({ type: 'error', text: 'Mật khẩu mới không khớp.' });
+      return;
+    }
+    if (changePassForm.oldPass === changePassForm.newPass) {
+      setChangePassMsg({ type: 'error', text: 'Mật khẩu mới phải khác mật khẩu cũ.' });
+      return;
+    }
+
+    const updatedUsers = usersDb.map(u => 
+      u.username === currentUser.username ? { ...u, password: changePassForm.newPass } : u
+    );
+    setUsersDb(updatedUsers);
+    setCurrentUser({ ...currentUser, password: changePassForm.newPass });
+    
+    setChangePassMsg({ type: 'success', text: 'Đổi mật khẩu thành công!' });
+    setTimeout(() => {
+      setShowChangePass(false);
+      setChangePassForm({ oldPass: '', newPass: '', confirmPass: '' });
+      setChangePassMsg({ type: '', text: '' });
+    }, 1500);
   };
 
   // ================= HELPERS & BADGES =================
@@ -280,7 +316,6 @@ export default function App() {
     const topSaoBooks = [...books].sort((a, b) => (b.sao || 0) - (a.sao || 0)).slice(0, 10);
     return (
       <div className="max-w-6xl mx-auto space-y-12">
-        {/* TOP SAO SONG TỬ */}
         <section>
           <div className="flex items-center gap-3 mb-6">
             <Star className="w-8 h-8 text-yellow-500 fill-yellow-500 animate-pulse" />
@@ -314,7 +349,6 @@ export default function App() {
           )}
         </section>
 
-        {/* GIEO QUẺ (Roll Random) */}
         <section className="py-16 text-center bg-gradient-to-br from-[#FFDAC1]/40 to-[#FFB7B2]/40 rounded-3xl shadow-inner border border-white/50 relative overflow-hidden">
           <Wand2 className="absolute -top-10 -right-10 w-48 h-48 text-[#FF9AA2]/20 rotate-12" />
           <h2 className="text-3xl font-black mb-4 text-[#D37340]">Gieo Quẻ Khám Phá</h2>
@@ -347,7 +381,6 @@ export default function App() {
           <div className="w-20"></div>
         </div>
 
-        {/* NỘI DUNG ĐỌC & BÌNH LUẬN NỘI TUYẾN */}
         <div className="p-8 md:p-12 font-sans">
           {paras.map((para, idx) => {
              const commentKey = `${selectedBook.id}_${chapter.id}_${idx}`;
@@ -416,7 +449,6 @@ export default function App() {
           })}
         </div>
 
-        {/* NÚT THÍCH (SAO SONG TỬ) */}
         <div className="py-12 border-t border-[#FFDAC1]/50 flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-800/20">
           <p className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Hết Chương</p>
           <button 
@@ -436,7 +468,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* ĐIỀU HƯỚNG CHƯƠNG */}
         <div className="bg-[#FFDAC1]/20 p-4 border-t border-[#FFDAC1]/50 flex items-center justify-between">
           <button 
             disabled={readingChapterIndex === 0}
@@ -457,10 +488,8 @@ export default function App() {
     );
   };
 
-  // ================= RENDER MAIN =================
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
-      {/* HEADER NAVBAR */}
       <header className={`sticky top-0 z-40 border-b backdrop-blur-md ${darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-[#FFB7B2]/30 shadow-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div onClick={() => { setActiveTab('home'); setSelectedBook(null); setReadingChapterIndex(null); }} className="flex items-center gap-3 cursor-pointer">
@@ -482,7 +511,13 @@ export default function App() {
                     {currentUser.role === 'Admin' ? 'Admin' : currentUser.role === 'Author' ? 'Tác giả' : 'Độc giả'}
                   </span>
                 </div>
-                <button onClick={handleLogout} title="Đăng xuất" className="p-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors"><LogOut className="w-4 h-4" /></button>
+                {/* NÚT ĐỔI MẬT KHẨU MỚI */}
+                <button onClick={() => setShowChangePass(true)} title="Đổi mật khẩu" className="p-2 rounded-xl border border-blue-200 text-blue-500 hover:bg-blue-50 transition-colors">
+                  <Lock className="w-4 h-4" />
+                </button>
+                <button onClick={handleLogout} title="Đăng xuất" className="p-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -516,10 +551,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        
-        {/* VIEW: READING OR NOVEL DETAIL */}
         {selectedBook ? (
           readingChapterIndex !== null ? renderReadingView() : (
             <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-3xl p-6 md:p-8 shadow-xl border border-[#FFDAC1]/30">
@@ -573,7 +605,6 @@ export default function App() {
             </div>
           )
         ) : (
-          /* MAIN TABS VIEWS */
           <>
             {activeTab === 'home' && renderHome()}
 
@@ -598,7 +629,6 @@ export default function App() {
               <div className="max-w-3xl mx-auto space-y-6">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-4">Diễn Đàn Độc Giả</h2>
                 
-                {/* Đăng Review Mới */}
                 <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-[#FFDAC1] shadow-sm">
                   <textarea 
                     rows="3" 
@@ -623,7 +653,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Danh sách Review */}
                 <div className="space-y-4">
                   {reviews.map(r => (
                     <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
@@ -677,7 +706,6 @@ export default function App() {
                     <textarea rows="4" placeholder="Giới thiệu về tác phẩm..." value={bookForm.summary} onChange={e=>setBookForm({...bookForm, summary: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm" />
                   </div>
 
-                  {/* Nhập Chương */}
                   <div className="border-t pt-6">
                     <h3 className="font-bold text-lg mb-4">Nội dung Chương 1</h3>
                     <input type="text" placeholder="Tên chương (VD: Chương 1: Mở đầu)" value={chaptersForm[0].title} onChange={e => setChaptersForm([{...chaptersForm[0], title: e.target.value}])} className="w-full px-4 py-2 mb-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" />
@@ -737,6 +765,40 @@ export default function App() {
                 {authMode === 'login' ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ĐỔI MẬT KHẨU */}
+      {showChangePass && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-blue-200">
+            <button onClick={() => { setShowChangePass(false); setChangePassMsg({type:'', text:''}); setChangePassForm({oldPass:'', newPass:'', confirmPass:''}); }} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+            <h3 className="text-2xl font-black text-blue-500 mb-6 text-center">Đổi Mật Khẩu</h3>
+            
+            {changePassMsg.text && (
+              <div className={`mb-4 p-3 rounded-xl text-xs font-bold text-center ${changePassMsg.type === 'error' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                {changePassMsg.text}
+              </div>
+            )}
+            
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1">Mật khẩu cũ</label>
+                <input type="password" value={changePassForm.oldPass} onChange={e => setChangePassForm({...changePassForm, oldPass: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1">Mật khẩu mới</label>
+                <input type="password" value={changePassForm.newPass} onChange={e => setChangePassForm({...changePassForm, newPass: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1">Xác nhận mật khẩu mới</label>
+                <input type="password" value={changePassForm.confirmPass} onChange={e => setChangePassForm({...changePassForm, confirmPass: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" />
+              </div>
+              <button type="submit" className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl shadow-md hover:bg-blue-600 transition-colors mt-2">
+                Cập Nhật Mật Khẩu
+              </button>
+            </form>
           </div>
         </div>
       )}
