@@ -8,7 +8,7 @@ import {
 
 const DEFAULT_LOGO_URL = "image_3c2d84.jpg";
 
-// ================= DỮ LIỆU MẪU =================
+// ================= DỮ LIỆU MẪU BAN ĐẦU =================
 const INITIAL_BOOKS = [
   {
     id: 1,
@@ -17,7 +17,7 @@ const INITIAL_BOOKS = [
     cover: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=400",
     tags: ["Trinh thám", "Kinh dị"],
     summary: "Một ngôi làng không có trên bản đồ, những vụ mất tích bí ẩn và một thám tử trẻ đang tìm kiếm sự thật...",
-    sao: 120, // Tổng Sao song tử (Khí vận)
+    sao: 120,
     views: 3450,
     chapters: [
       { id: 1, title: "Chương 1: Lời mời kì lạ", content: "Mưa rơi rả rích trên con hẻm nhỏ.\nTôi nhận được một bức thư không người gửi.\nBên trong chỉ có một tấm vé tàu cũ kĩ và dòng chữ: 'Đến làng Vô Danh, nếu muốn biết sự thật'.", sao: 45, views: 1200 },
@@ -31,7 +31,7 @@ const INITIAL_BOOKS = [
     cover: "https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&q=80&w=400",
     tags: ["Tình cảm", "Cổ đại"],
     summary: "Nàng chờ đợi ngàn năm dưới gốc bồ đề, chỉ đổi lấy một lần hồi眸 của người ấy.",
-    sao: 1500, // Trời sinh may mắn
+    sao: 1500,
     views: 12000,
     chapters: [
       { id: 1, title: "Chương 1: Hội Ngộ", content: "Hoa đào rơi lả tả như tuyết mùa xuân.\nHắn vận bạch y, đứng dưới gốc cây mỉm cười.\nKhoảnh khắc đó, ta biết mình đã định sẵn một đời trầm luân.", sao: 500, views: 5000 }
@@ -45,7 +45,7 @@ const INITIAL_REVIEWS = [
 ];
 
 export default function App() {
-  // ================= STATE =================
+  // ================= STATE & STORAGE =================
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home'); 
   
@@ -54,36 +54,75 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login'); 
   const [authError, setAuthError] = useState('');
   const [authForm, setAuthForm] = useState({ username: '', password: '', role: 'Reader' });
-  const [currentUser, setCurrentUser] = useState({ username: "Admin T714", role: "Admin", reputation: 1200 });
-  const [usersDb, setUsersDb] = useState([
-    { username: "Admin T714", password: "123", role: "Admin", reputation: 1200 },
-    { username: "Độc giả T714", password: "123", role: "Reader", reputation: 85 },
-    { username: "Lưu Lang Thần", password: "123", role: "Author", reputation: 350 },
-    { username: "Mộng Tiên", password: "123", role: "Author", reputation: 90 }
-  ]);
-
-  // Data State
-  const [books, setBooks] = useState(INITIAL_BOOKS);
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
-  const [inlineComments, setInlineComments] = useState({}); // Lọc theo key: bookId_chapterId_paraIndex
   
+  // Khởi tạo CurrentUser & DB từ LocalStorage
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('t714_current_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [usersDb, setUsersDb] = useState(() => {
+    const saved = localStorage.getItem('t714_users_db');
+    return saved ? JSON.parse(saved) : [
+      { username: "Admin T714", password: "123", role: "Admin", reputation: 1200 },
+      { username: "Độc giả T714", password: "123", role: "Reader", reputation: 85 },
+      { username: "Lưu Lang Thần", password: "123", role: "Author", reputation: 350 },
+      { username: "Mộng Tiên", password: "123", role: "Author", reputation: 90 }
+    ];
+  });
+
+  // Data State với LocalStorage
+  const [books, setBooks] = useState(() => {
+    const saved = localStorage.getItem('t714_books');
+    return saved ? JSON.parse(saved) : INITIAL_BOOKS;
+  });
+
+  const [reviews, setReviews] = useState(() => {
+    const saved = localStorage.getItem('t714_reviews');
+    return saved ? JSON.parse(saved) : INITIAL_REVIEWS;
+  });
+
+  const [inlineComments, setInlineComments] = useState(() => {
+    const saved = localStorage.getItem('t714_inline_comments');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Tự động đồng bộ với LocalStorage khi có thay đổi
+  useEffect(() => {
+    localStorage.setItem('t714_current_user', JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('t714_users_db', JSON.stringify(usersDb));
+  }, [usersDb]);
+
+  useEffect(() => {
+    localStorage.setItem('t714_books', JSON.stringify(books));
+  }, [books]);
+
+  useEffect(() => {
+    localStorage.setItem('t714_reviews', JSON.stringify(reviews));
+  }, [reviews]);
+
+  useEffect(() => {
+    localStorage.setItem('t714_inline_comments', JSON.stringify(inlineComments));
+  }, [inlineComments]);
+
   // Reading & Navigation State
   const [selectedBook, setSelectedBook] = useState(null);
   const [readingChapterIndex, setReadingChapterIndex] = useState(null);
-  const [selectedTagFilter, setSelectedTagFilter] = useState('Tất cả');
   const [randomBookModal, setRandomBookModal] = useState(null);
   const [showMessageModal, setShowMessageModal] = useState({ show: false, text: '' });
+  const [newReviewText, setNewReviewText] = useState('');
 
   // Creation State (Đăng Truyện)
   const [bookForm, setBookForm] = useState({ title: '', cover: '', summary: '' });
   const [formTags, setFormTags] = useState([]);
-  const [customTags, setCustomTags] = useState([]);
-  const [newCustomTag, setNewCustomTag] = useState('');
   const [chaptersForm, setChaptersForm] = useState([{ title: '', content: '' }]);
 
   const userRole = currentUser ? currentUser.role : 'Guest';
 
-  // ================= AUTH LOGIC =================
+  // ================= AUTH LOGIC (SỬA LỖI ADMIN & LƯU TK) =================
   const handleAuthSubmit = (e) => {
     e.preventDefault();
     setAuthError('');
@@ -92,8 +131,10 @@ export default function App() {
       return;
     }
 
+    const inputName = authForm.username.trim();
+
     if (authMode === 'login') {
-      const foundUser = usersDb.find(u => u.username.toLowerCase() === authForm.username.trim().toLowerCase() && u.password === authForm.password);
+      const foundUser = usersDb.find(u => u.username.toLowerCase() === inputName.toLowerCase() && u.password === authForm.password);
       if (foundUser) {
         setCurrentUser(foundUser);
         setShowAuthModal(false);
@@ -101,16 +142,32 @@ export default function App() {
         setAuthError('Tên đăng nhập hoặc mật khẩu không đúng!');
       }
     } else {
-      if (usersDb.some(u => u.username.toLowerCase() === authForm.username.trim().toLowerCase())) {
-        setAuthError('Tên người dùng đã tồn tại!');
+      // ĐĂNG KÝ MỚI
+      if (usersDb.some(u => u.username.toLowerCase() === inputName.toLowerCase())) {
+        setAuthError('Tên người dùng này đã tồn tại!');
         return;
       }
-      const newUser = { username: authForm.username.trim(), password: authForm.password, role: authForm.role, reputation: 0 };
-      setUsersDb([...usersDb, newUser]);
-      setCurrentUser(newUser);
+      
+      // Tạo user mới với đúng role (Mặc định Reader/Author, KHÔNG BAO GIỜ tự lên Admin)
+      const newUser = { 
+        username: inputName, 
+        password: authForm.password, 
+        role: authForm.role || 'Reader', 
+        reputation: 0 
+      };
+      
+      setUsersDb(prev => [...prev, newUser]);
+      setCurrentUser(newUser); // Đăng nhập luôn bằng nick vừa tạo
       setShowAuthModal(false);
+      showMsg("Đăng ký tài khoản thành công!");
     }
     setAuthForm({ username: '', password: '', role: 'Reader' });
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('t714_current_user');
+    showMsg("Đã đăng xuất tài khoản.");
   };
 
   // ================= HELPERS & BADGES =================
@@ -142,7 +199,9 @@ export default function App() {
     setReviews(reviews.map(r => {
       if (r.id === reviewId) {
         setUsersDb(usersDb.map(u => u.username === r.author ? { ...u, reputation: u.reputation + 1 } : u));
-        if (currentUser && currentUser.username === r.author) setCurrentUser({ ...currentUser, reputation: currentUser.reputation + 1 });
+        if (currentUser && currentUser.username === r.author) {
+          setCurrentUser({ ...currentUser, reputation: currentUser.reputation + 1 });
+        }
         return { ...r, likes: r.likes + 1 };
       }
       return r;
@@ -183,7 +242,7 @@ export default function App() {
   };
 
   const handleRoll = () => {
-    const candidates = books.filter(b => (b.sao || 0) > 0);
+    const candidates = books.filter(b => (b.sao || 0) >= 0);
     if (candidates.length === 0) {
       showMsg("Chưa có truyện nào được xếp hạng để gieo quẻ!");
       return;
@@ -218,7 +277,7 @@ export default function App() {
 
   // ================= VIEW COMPONENTS =================
   const renderHome = () => {
-    const topSaoBooks = [...books].filter(b => (b.sao || 0) > 0).sort((a, b) => b.sao - a.sao).slice(0, 10);
+    const topSaoBooks = [...books].sort((a, b) => (b.sao || 0) - (a.sao || 0)).slice(0, 10);
     return (
       <div className="max-w-6xl mx-auto space-y-12">
         {/* TOP SAO SONG TỬ */}
@@ -226,7 +285,7 @@ export default function App() {
           <div className="flex items-center gap-3 mb-6">
             <Star className="w-8 h-8 text-yellow-500 fill-yellow-500 animate-pulse" />
             <h2 className="text-3xl font-black bg-gradient-to-r from-yellow-500 to-[#FF9AA2] bg-clip-text text-transparent">
-              Top 10 Sao Song Tử
+              Top 10 Bảng Xếp Hạng
             </h2>
           </div>
           {topSaoBooks.length === 0 ? (
@@ -245,8 +304,8 @@ export default function App() {
                     <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 line-clamp-1">{book.title}</h3>
                     <p className="text-xs text-slate-500 mt-1 mb-2">Tác giả: {book.author}</p>
                     <div className="flex items-center gap-3 text-xs font-bold text-[#D37340]">
-                      <span className="flex items-center gap-1"><Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /> {book.sao} Khí vận</span>
-                      <span className="flex items-center gap-1 text-slate-400"><Eye className="w-4 h-4" /> {book.views} Lượt xem</span>
+                      <span className="flex items-center gap-1"><Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /> {book.sao || 0} Khí vận</span>
+                      <span className="flex items-center gap-1 text-slate-400"><Eye className="w-4 h-4" /> {book.views || 0} Lượt xem</span>
                     </div>
                   </div>
                 </div>
@@ -293,13 +352,12 @@ export default function App() {
           {paras.map((para, idx) => {
              const commentKey = `${selectedBook.id}_${chapter.id}_${idx}`;
              const parasComments = inlineComments[commentKey] || [];
-             const isCommenting = activeTab === `comment_${commentKey}`; // Dùng activeTab tạm để toggle comment
+             const isCommenting = activeTab === `comment_${commentKey}`;
              
              return (
                <div key={idx} className="relative group mb-6">
                  <p className="text-lg leading-relaxed text-slate-800 dark:text-slate-300 whitespace-pre-wrap">{para}</p>
                  
-                 {/* Nút Toggle Comment */}
                  <button 
                     onClick={() => setActiveTab(isCommenting ? 'reading' : `comment_${commentKey}`)}
                     className="absolute -right-2 top-0 md:-right-10 opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-[#FFDAC1]/50 text-[#D37340] rounded-full hover:bg-[#FFDAC1] shadow-sm z-10"
@@ -308,7 +366,6 @@ export default function App() {
                     {parasComments.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{parasComments.length}</span>}
                  </button>
 
-                 {/* Hộp Comment Nội tuyến */}
                  {isCommenting && (
                    <div className="mt-4 p-4 bg-white dark:bg-slate-800 rounded-2xl border-2 border-[#FFDAC1]/50 shadow-lg ml-4 relative">
                      <button onClick={() => setActiveTab('reading')} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><X className="w-4 h-4"/></button>
@@ -359,7 +416,7 @@ export default function App() {
           })}
         </div>
 
-        {/* NÚT THÍCH (SAO SONG TỬ) Ở CUỐI CHƯƠNG */}
+        {/* NÚT THÍCH (SAO SONG TỬ) */}
         <div className="py-12 border-t border-[#FFDAC1]/50 flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-800/20">
           <p className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Hết Chương</p>
           <button 
@@ -425,7 +482,7 @@ export default function App() {
                     {currentUser.role === 'Admin' ? 'Admin' : currentUser.role === 'Author' ? 'Tác giả' : 'Độc giả'}
                   </span>
                 </div>
-                <button onClick={() => setCurrentUser(null)} title="Đăng xuất" className="p-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors"><LogOut className="w-4 h-4" /></button>
+                <button onClick={handleLogout} title="Đăng xuất" className="p-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors"><LogOut className="w-4 h-4" /></button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -522,141 +579,161 @@ export default function App() {
 
             {activeTab === 'books' && (
               <div className="space-y-6">
-                 {/* Lọc Tag logic... có thể thêm menu dropdown đơn giản ở đây */}
-                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {books.map(book => (
-                       <div key={book.id} onClick={() => setSelectedBook(book)} className="group cursor-pointer">
-                          <div className="aspect-[2/3] rounded-2xl overflow-hidden shadow-md mb-3 border border-[#E2F0CB]">
-                            <img src={book.cover} alt="Cover" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          </div>
-                          <h3 className="font-bold text-slate-800 dark:text-slate-100 line-clamp-1 group-hover:text-[#FF9AA2]">{book.title}</h3>
-                          <p className="text-xs text-slate-500 mt-1">{book.author}</p>
-                       </div>
-                    ))}
-                 </div>
+                <h2 className="text-2xl font-black text-[#FF9AA2] mb-4">Thư Viện Truyện</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                  {books.map(book => (
+                    <div key={book.id} onClick={() => setSelectedBook(book)} className="group cursor-pointer">
+                      <div className="aspect-[2/3] rounded-2xl overflow-hidden shadow-md mb-3 border border-[#E2F0CB]">
+                        <img src={book.cover} alt="Cover" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      </div>
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100 line-clamp-1 group-hover:text-[#FF9AA2]">{book.title}</h3>
+                      <p className="text-xs text-slate-500 mt-1">{book.author}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'forum' && (
+              <div className="max-w-3xl mx-auto space-y-6">
+                <h2 className="text-2xl font-black text-[#FF9AA2] mb-4">Diễn Đàn Độc Giả</h2>
+                
+                {/* Đăng Review Mới */}
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-[#FFDAC1] shadow-sm">
+                  <textarea 
+                    rows="3" 
+                    placeholder="Viết cảm nghĩ, đề cử truyện của bạn..." 
+                    value={newReviewText} 
+                    onChange={e => setNewReviewText(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 outline-none text-sm"
+                  />
+                  <div className="flex justify-between items-center mt-3">
+                    <span className="text-xs text-slate-400">Tự do chia sẻ cảm xúc về tác phẩm</span>
+                    <button 
+                      onClick={() => {
+                        if(!currentUser) { showMsg("Vui lòng đăng nhập để gửi bài!"); return; }
+                        if(!newReviewText.trim()) return;
+                        setReviews([{ id: Date.now(), author: currentUser.username, authorRole: currentUser.role, authorReputation: currentUser.reputation, text: newReviewText, likes: 0 }, ...reviews]);
+                        setNewReviewText('');
+                      }}
+                      className="px-4 py-2 bg-[#FF9AA2] text-white font-bold rounded-xl text-sm shadow-md hover:bg-[#FFB7B2]"
+                    >
+                      Đăng bài
+                    </button>
+                  </div>
+                </div>
+
+                {/* Danh sách Review */}
+                <div className="space-y-4">
+                  {reviews.map(r => (
+                    <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                          {r.author} {getReputationBadge(r.authorReputation, r.authorRole)}
+                        </div>
+                        <button onClick={() => handleLikeReview(r.id)} className="flex items-center gap-1 text-xs font-bold text-[#FF9AA2] bg-[#FFDAC1]/30 px-3 py-1 rounded-full">
+                          <Heart className="w-3.5 h-3.5 fill-[#FF9AA2]" /> {r.likes}
+                        </button>
+                      </div>
+                      <p className="text-slate-600 dark:text-slate-300 text-sm">{r.text}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
             {activeTab === 'publish' && (userRole === 'Author' || userRole === 'Admin') && (
               <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 border border-[#FFDAC1]/50">
-                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-6 flex items-center gap-2"><PlusCircle className="w-6 h-6"/> Đăng Tác Phẩm Mới</h2>
-                 <div className="space-y-6">
-                    <input type="text" placeholder="Tên truyện..." value={bookForm.title} onChange={e=>setBookForm({...bookForm, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 outline-none font-bold" />
-                    
-                    <div>
-                      <p className="font-bold text-sm mb-2">Gắn thẻ (Tags):</p>
-                      <div className="flex flex-wrap gap-2">
-                        {["Trinh thám", "Tình cảm", "Huyền huyễn", "Tu tiên", "Kinh dị"].map(tag => (
-                          <label key={tag} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-white cursor-pointer hover:bg-slate-50">
-                            <input type="checkbox" checked={formTags.includes(tag)} onChange={e => e.target.checked ? setFormTags([...formTags, tag]) : setFormTags(formTags.filter(t=>t!==tag))} className="rounded text-[#FF9AA2]" />
-                            <span className="text-sm">{tag}</span>
-                          </label>
-                        ))}
-                        {customTags.map(tag => (
-                          <label key={tag} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-[#E2F0CB] cursor-pointer">
-                            <input type="checkbox" checked={formTags.includes(tag)} onChange={e => e.target.checked ? setFormTags([...formTags, tag]) : setFormTags(formTags.filter(t=>t!==tag))} className="rounded text-[#FF9AA2]" />
-                            <span className="text-sm font-bold">{tag}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="flex gap-2 mt-3">
-                         <input type="text" value={newCustomTag} onChange={e=>setNewCustomTag(e.target.value)} placeholder="Tag tự do (Sáng tạo)..." className="px-3 py-1.5 text-sm rounded-lg border outline-none focus:border-[#FF9AA2]" />
-                         <button onClick={() => { if(newCustomTag.trim() && !customTags.includes(newCustomTag.trim())) setCustomTags([...customTags, newCustomTag.trim()]); setNewCustomTag(''); }} className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm font-bold">Thêm Tag</button>
-                      </div>
-                    </div>
-
-                    <textarea placeholder="Văn án (Giới thiệu nội dung)..." value={bookForm.summary} onChange={e=>setBookForm({...bookForm, summary: e.target.value})} rows={4} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 outline-none" />
-
-                    <div className="border-t pt-6">
-                      <h3 className="font-black text-lg mb-4 text-[#D37340]">Quản lý Chương</h3>
-                      {chaptersForm.map((ch, i) => (
-                        <div key={i} className="mb-4 p-4 rounded-xl border border-slate-200 bg-slate-50 relative">
-                          <input type="text" placeholder={`Tên chương ${i+1}`} value={ch.title} onChange={e=>{const newChs=[...chaptersForm]; newChs[i].title=e.target.value; setChaptersForm(newChs);}} className="w-full px-3 py-2 mb-3 rounded-lg border outline-none font-bold text-sm" />
-                          <textarea placeholder="Nội dung chương..." value={ch.content} onChange={e=>{const newChs=[...chaptersForm]; newChs[i].content=e.target.value; setChaptersForm(newChs);}} rows={6} className="w-full px-3 py-2 rounded-lg border outline-none text-sm" />
-                        </div>
-                      ))}
-                      <button onClick={()=>setChaptersForm([...chaptersForm, {title:'', content:''}])} className="flex items-center gap-2 px-4 py-2 bg-[#FFDAC1] text-[#D37340] font-bold rounded-xl hover:bg-[#FFB7B2] hover:text-white transition-colors">
-                        <PlusCircle className="w-4 h-4"/> Thêm Chương Nữa
-                      </button>
-                    </div>
-
-                    <button onClick={handlePublish} className="w-full py-4 bg-[#FF9AA2] text-white font-black rounded-xl shadow-lg hover:-translate-y-1 transition-transform text-lg mt-6">
-                       Xuất Bản Tác Phẩm
-                    </button>
-                 </div>
-              </div>
-            )}
-            
-            {activeTab === 'forum' && (
-              <div className="max-w-4xl mx-auto space-y-6">
-                <div className="bg-[#B5EAD7]/30 p-6 rounded-3xl border border-[#B5EAD7] text-center">
-                   <h2 className="text-2xl font-black text-emerald-800 mb-2">Diễn Đàn Cộng Đồng</h2>
-                   <p className="text-emerald-700">Chia sẻ, bình luận và tích luỹ Uy tín để trở thành Vua Sách!</p>
-                </div>
-                {reviews.map(r => (
-                  <div key={r.id} className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col gap-4">
-                     <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-bold text-[#FF9AA2] flex items-center">{r.author} {getReputationBadge(r.authorReputation, r.authorRole)}</div>
-                          <div className="text-xs text-slate-500 mt-1">Đánh giá về truyện: <strong>{books.find(b=>b.id===r.bookId)?.title || "Truyện đã xoá"}</strong></div>
-                        </div>
-                     </div>
-                     <p className="text-slate-700">{r.text}</p>
-                     <button onClick={() => handleLikeReview(r.id)} className="self-start flex items-center gap-2 px-3 py-1.5 bg-[#FFDAC1]/30 hover:bg-[#FFDAC1] text-[#D37340] rounded-full text-sm font-bold transition-colors">
-                        <ThumbsUp className="w-4 h-4" /> Hữu ích ({r.likes})
-                     </button>
+                <h2 className="text-2xl font-black text-[#FF9AA2] mb-6 flex items-center gap-2"><PlusCircle className="w-6 h-6"/> Đăng Tác Phẩm Mới</h2>
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Tên truyện</label>
+                    <input type="text" placeholder="Tên truyện..." value={bookForm.title} onChange={e=>setBookForm({...bookForm, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none font-bold" />
                   </div>
-                ))}
+
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Link Ảnh Bìa (URL)</label>
+                    <input type="text" placeholder="https://..." value={bookForm.cover} onChange={e=>setBookForm({...bookForm, cover: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm" />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Thể loại (gõ rồi chọn)</label>
+                    <div className="flex gap-2 mb-2">
+                      {['Trinh thám', 'Kinh dị', 'Tình cảm', 'Cổ đại', 'Huyền huyễn'].map(tag => (
+                        <button 
+                          key={tag} 
+                          type="button"
+                          onClick={() => setFormTags(formTags.includes(tag) ? formTags.filter(t=>t!==tag) : [...formTags, tag])}
+                          className={`px-3 py-1 rounded-full text-xs font-bold border ${formTags.includes(tag) ? 'bg-[#FF9AA2] text-white border-[#FF9AA2]' : 'bg-slate-100 text-slate-600'}`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Văn án (Tóm tắt câu chuyện)</label>
+                    <textarea rows="4" placeholder="Giới thiệu về tác phẩm..." value={bookForm.summary} onChange={e=>setBookForm({...bookForm, summary: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm" />
+                  </div>
+
+                  {/* Nhập Chương */}
+                  <div className="border-t pt-6">
+                    <h3 className="font-bold text-lg mb-4">Nội dung Chương 1</h3>
+                    <input type="text" placeholder="Tên chương (VD: Chương 1: Mở đầu)" value={chaptersForm[0].title} onChange={e => setChaptersForm([{...chaptersForm[0], title: e.target.value}])} className="w-full px-4 py-2 mb-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" />
+                    <textarea rows="8" placeholder="Nội dung câu chuyện..." value={chaptersForm[0].content} onChange={e => setChaptersForm([{...chaptersForm[0], content: e.target.value}])} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm" />
+                  </div>
+
+                  <button onClick={handlePublish} className="w-full py-4 bg-[#FF9AA2] hover:bg-[#FFB7B2] text-white font-black rounded-2xl shadow-lg transition-all text-lg">
+                    Xuất Bản Ngay
+                  </button>
+                </div>
               </div>
             )}
           </>
         )}
       </main>
 
-      {/* MODAL THÔNG BÁO LỖI/THÀNH CÔNG */}
-      {showMessageModal.show && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center border-2 border-[#FFB7B2]">
-             <CheckCircle className="w-12 h-12 text-[#FF9AA2] mx-auto mb-4" />
-             <p className="font-bold text-lg text-slate-800 mb-6">{showMessageModal.text}</p>
-             <button onClick={() => setShowMessageModal({ show: false, text: '' })} className="px-6 py-2 bg-[#FFDAC1] hover:bg-[#FFB7B2] font-bold rounded-xl">Đóng</button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL AUTH */}
+      {/* MODAL ĐĂNG NHẬP / ĐĂNG KÝ */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="relative max-w-md w-full p-8 rounded-3xl shadow-2xl bg-white border border-[#FFB7B2]/50">
-            <button onClick={() => setShowAuthModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-6 h-6" /></button>
-            <div className="text-center mb-6">
-              <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF9AA2] to-[#D37340]">
-                {authMode === 'login' ? 'Đăng Nhập T714' : 'Đăng Ký Tài Khoản'}
-              </h3>
-            </div>
-            {authError && <div className="mb-4 p-3 bg-red-100 text-red-600 text-xs font-bold rounded-xl text-center">{authError}</div>}
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-[#FFDAC1]">
+            <button onClick={() => setShowAuthModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+            <h3 className="text-2xl font-black text-[#FF9AA2] mb-2 text-center">
+              {authMode === 'login' ? 'Đăng Nhập' : 'Tạo Tài Khoản'}
+            </h3>
+            <p className="text-xs text-slate-400 text-center mb-6">Tham gia cộng đồng đọc truyện T714</p>
+            
+            {authError && <div className="mb-4 p-3 bg-red-100 text-red-600 rounded-xl text-xs font-bold text-center">{authError}</div>}
+            
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold mb-1 opacity-80">Tên người dùng</label>
-                <input required type="text" value={authForm.username} onChange={e => setAuthForm({...authForm, username: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none focus:border-[#FF9AA2]" />
+                <label className="block text-xs font-bold mb-1">Tên tài khoản</label>
+                <input type="text" value={authForm.username} onChange={e => setAuthForm({...authForm, username: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" placeholder="Nhập tên..." />
               </div>
+              
               <div>
-                <label className="block text-xs font-bold mb-1 opacity-80">Mật khẩu</label>
-                <input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 outline-none focus:border-[#FF9AA2]" />
+                <label className="block text-xs font-bold mb-1">Mật khẩu</label>
+                <input type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold" placeholder="Nhập mật khẩu..." />
               </div>
+
               {authMode === 'register' && (
                 <div>
-                  <label className="block text-xs font-bold mb-1.5 opacity-80">Vai trò</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button type="button" onClick={() => setAuthForm({...authForm, role: 'Reader'})} className={`py-2 px-3 rounded-xl border font-bold text-xs flex justify-center items-center gap-1 ${authForm.role === 'Reader' ? 'bg-[#FF9AA2] text-white' : 'bg-slate-50 text-slate-500'}`}><BookOpen className="w-3.5 h-3.5"/> Độc giả</button>
-                    <button type="button" onClick={() => setAuthForm({...authForm, role: 'Author'})} className={`py-2 px-3 rounded-xl border font-bold text-xs flex justify-center items-center gap-1 ${authForm.role === 'Author' ? 'bg-[#FF9AA2] text-white' : 'bg-slate-50 text-slate-500'}`}><Sparkles className="w-3.5 h-3.5"/> Tác giả</button>
-                  </div>
+                  <label className="block text-xs font-bold mb-1">Bạn muốn làm:</label>
+                  <select value={authForm.role} onChange={e => setAuthForm({...authForm, role: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold">
+                    <option value="Reader">Độc giả (Chỉ đọc & bình luận)</option>
+                    <option value="Author">Tác giả (Được đăng truyện)</option>
+                  </select>
                 </div>
               )}
-              <button type="submit" className="w-full py-3.5 bg-[#FF9AA2] text-white font-bold rounded-xl mt-4">{authMode === 'login' ? 'Đăng Nhập' : 'Tạo Tài Khoản'}</button>
+
+              <button type="submit" className="w-full py-3 bg-[#FF9AA2] text-white font-bold rounded-xl shadow-md hover:bg-[#FFB7B2] transition-colors mt-2">
+                {authMode === 'login' ? 'Vào Hệ Thống' : 'Hoàn Tất Đăng Ký'}
+              </button>
             </form>
-            <div className="mt-6 text-center text-xs opacity-80 border-t pt-4 border-slate-200">
-              <button onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }} className="font-bold text-[#FF9AA2] hover:underline">
+
+            <div className="mt-4 text-center">
+              <button onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }} className="text-xs font-bold text-[#D37340] hover:underline">
                 {authMode === 'login' ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
               </button>
             </div>
@@ -664,22 +741,31 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL RANDOM TRUYỆN */}
+      {/* MODAL THÔNG BÁO */}
+      {showMessageModal.show && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-xl border border-[#FFDAC1]">
+            <p className="font-bold text-slate-800 dark:text-slate-100 mb-4">{showMessageModal.text}</p>
+            <button onClick={() => setShowMessageModal({ show: false, text: '' })} className="px-6 py-2 bg-[#FF9AA2] text-white font-bold rounded-xl text-sm">Đóng</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GIEO QUẺ */}
       {randomBookModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="relative max-w-sm w-full bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-2xl border-4 border-[#FFDAC1] text-center animate-bounce-short">
-            <button onClick={() => setRandomBookModal(null)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-6 h-6" /></button>
-            <Wand2 className="w-16 h-16 mx-auto text-[#FF9AA2] mb-4 drop-shadow-md" />
-            <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Thiên ý đã chọn!</h3>
-            <p className="text-sm text-slate-500 mb-6">Bạn hãy thử đọc tác phẩm này nhé:</p>
-            <img src={randomBookModal.cover} alt="Cover" className="w-32 h-48 object-cover rounded-xl shadow-lg mx-auto mb-4 border-2 border-[#E2F0CB]" />
-            <h4 className="font-black text-[#FF9AA2] text-xl mb-1">{randomBookModal.title}</h4>
-            <p className="text-sm font-bold text-[#D37340] mb-6">Tác giả: {randomBookModal.author}</p>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl relative border border-yellow-400">
+            <button onClick={() => setRandomBookModal(null)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+            <Sparkles className="w-12 h-12 text-yellow-500 mx-auto mb-2 animate-bounce" />
+            <h3 className="text-lg font-black text-yellow-600 mb-1">Quẻ Hạp Duyên!</h3>
+            <img src={randomBookModal.cover} alt="Cover" className="w-32 h-48 object-cover rounded-xl mx-auto my-3 shadow-md" />
+            <h4 className="font-bold text-slate-800 dark:text-slate-100">{randomBookModal.title}</h4>
+            <p className="text-xs text-slate-500 mb-4">Tác giả: {randomBookModal.author}</p>
             <button 
               onClick={() => { setSelectedBook(randomBookModal); setRandomBookModal(null); setActiveTab('books'); }}
-              className="w-full py-3 bg-gradient-to-r from-[#FF9AA2] to-[#FFB7B2] text-white font-black rounded-xl shadow-md hover:-translate-y-1 transition-transform"
+              className="w-full py-3 bg-[#FF9AA2] text-white font-bold rounded-xl shadow-md"
             >
-              Đọc Ngay
+              Đọc Truyện Ngay
             </button>
           </div>
         </div>
