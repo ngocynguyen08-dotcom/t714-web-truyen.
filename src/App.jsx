@@ -3,7 +3,7 @@ import {
   BookOpen, Crown, Award, ThumbsUp, Shuffle, MessageSquare, 
   Shield, UserCheck, Moon, Sun, PlusCircle, Eye, CheckCircle, 
   Sparkles, Send, ImagePlus, Trash2, List, FileText, ChevronLeft, ChevronRight, Wand2,
-  MessageCircle, X, Hash, Star, LogIn, UserPlus, LogOut, Lock, User, Heart
+  MessageCircle, X, Hash, Star, LogIn, UserPlus, LogOut, Lock, User, Heart, Bookmark, Edit3, Settings
 } from 'lucide-react';
 
 const DEFAULT_LOGO_URL = "image_3c2d84.jpg";
@@ -92,7 +92,18 @@ export default function App() {
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Tự động đồng bộ với LocalStorage khi có thay đổi
+  // Tủ sách & Tiến trình đọc (Saved Books & Reading Progress)
+  const [savedBookIds, setSavedBookIds] = useState(() => {
+    const saved = localStorage.getItem('t714_saved_books');
+    return saved ? JSON.parse(saved) : {}; // Cấu trúc: { username: [bookId1, bookId2] }
+  });
+
+  const [readingProgress, setReadingProgress] = useState(() => {
+    const saved = localStorage.getItem('t714_reading_progress');
+    return saved ? JSON.parse(saved) : {}; // Cấu trúc: { "username_bookId": chapterIndex }
+  });
+
+  // Tự động đồng bộ với LocalStorage
   useEffect(() => {
     localStorage.setItem('t714_current_user', JSON.stringify(currentUser));
   }, [currentUser]);
@@ -113,7 +124,15 @@ export default function App() {
     localStorage.setItem('t714_inline_comments', JSON.stringify(inlineComments));
   }, [inlineComments]);
 
-  // Reading & Navigation State
+  useEffect(() => {
+    localStorage.setItem('t714_saved_books', JSON.stringify(savedBookIds));
+  }, [savedBookIds]);
+
+  useEffect(() => {
+    localStorage.setItem('t714_reading_progress', JSON.stringify(readingProgress));
+  }, [readingProgress]);
+
+  // Navigation & Modal State
   const [selectedBook, setSelectedBook] = useState(null);
   const [readingChapterIndex, setReadingChapterIndex] = useState(null);
   const [randomBookModal, setRandomBookModal] = useState(null);
@@ -123,7 +142,13 @@ export default function App() {
   // Creation State (Đăng Truyện)
   const [bookForm, setBookForm] = useState({ title: '', cover: '', summary: '' });
   const [formTags, setFormTags] = useState([]);
+  const [customTagInput, setCustomTagInput] = useState('');
   const [chaptersForm, setChaptersForm] = useState([{ title: '', content: '' }]);
+
+  // Author Management State (Quản lý truyện của Tác giả)
+  const [editingBook, setEditingBook] = useState(null); // Book đang được sửa
+  const [newChapterModal, setNewChapterModal] = useState({ show: false, bookId: null, title: '', content: '' });
+  const [editChapterModal, setEditChapterModal] = useState({ show: false, bookId: null, chapterId: null, title: '', content: '' });
 
   const userRole = currentUser ? currentUser.role : 'Guest';
 
@@ -187,10 +212,6 @@ export default function App() {
       setChangePassMsg({ type: 'error', text: 'Mật khẩu mới không khớp.' });
       return;
     }
-    if (changePassForm.oldPass === changePassForm.newPass) {
-      setChangePassMsg({ type: 'error', text: 'Mật khẩu mới phải khác mật khẩu cũ.' });
-      return;
-    }
 
     const updatedUsers = usersDb.map(u => 
       u.username === currentUser.username ? { ...u, password: changePassForm.newPass } : u
@@ -230,7 +251,43 @@ export default function App() {
     return null;
   };
 
-  // ================= TƯƠNG TÁC TRUYỆN =================
+  // ================= TỦ SÁCH & TIẾN TRÌNH ĐỌC =================
+  const isBookSaved = (bookId) => {
+    if (!currentUser) return false;
+    const userSaved = savedBookIds[currentUser.username] || [];
+    return userSaved.includes(bookId);
+  };
+
+  const toggleSaveBook = (bookId) => {
+    if (!currentUser) {
+      showMsg("Vui lòng đăng nhập để lưu truyện vào tủ sách!");
+      return;
+    }
+    const userSaved = savedBookIds[currentUser.username] || [];
+    let updated;
+    if (userSaved.includes(bookId)) {
+      updated = userSaved.filter(id => id !== bookId);
+      showMsg("Đã xóa truyện khỏi Tủ sách.");
+    } else {
+      updated = [...userSaved, bookId];
+      showMsg("Đã lưu truyện vào Tủ sách!");
+    }
+    setSavedBookIds({ ...savedBookIds, [currentUser.username]: updated });
+  };
+
+  const saveReadingProgress = (bookId, chapterIndex) => {
+    if (!currentUser) return;
+    const key = `${currentUser.username}_${bookId}`;
+    setReadingProgress(prev => ({ ...prev, [key]: chapterIndex }));
+  };
+
+  const getSavedChapterIndex = (bookId) => {
+    if (!currentUser) return 0;
+    const key = `${currentUser.username}_${bookId}`;
+    return readingProgress[key] !== undefined ? readingProgress[key] : 0;
+  };
+
+  // ================= TƯƠNG TÁC TRUYỆN & DIỄN ĐÀN =================
   const handleLikeReview = (reviewId) => {
     setReviews(reviews.map(r => {
       if (r.id === reviewId) {
@@ -244,7 +301,6 @@ export default function App() {
     }));
   };
 
-  // THÊM: HÀM XOÁ BÀI TRÊN DIỄN ĐÀN (Dành cho Admin)
   const handleDeleteReview = (reviewId) => {
     setReviews(reviews.filter(r => r.id !== reviewId));
     showMsg("Đã xoá bài đăng trên diễn đàn.");
@@ -262,16 +318,11 @@ export default function App() {
       if (b.id === bookId) {
         const updatedChapters = b.chapters.map(c => {
           if (c.id === chapterId) {
-            // Khởi tạo mảng likedBy nếu chương này chưa có ai like
             const likedBy = c.likedBy || [];
-            
-            // Kiểm tra xem user này đã thả sao chưa
             if (likedBy.includes(currentUser.username)) {
               alreadyLiked = true;
-              return c; // Đã like rồi thì giữ nguyên không đổi
+              return c;
             }
-            
-            // Nếu chưa like thì tăng 1 sao và thêm tên user vào danh sách
             return { 
               ...c, 
               sao: (c.sao || 0) + 1, 
@@ -281,7 +332,6 @@ export default function App() {
           return c;
         });
 
-        // Nếu đã like rồi thì không tăng sao của truyện nữa
         if (alreadyLiked) return b;
 
         return {
@@ -298,12 +348,8 @@ export default function App() {
       return;
     }
 
-    // Cập nhật lại kho truyện
     setBooks(updatedBooks);
-    
-    // RẤT QUAN TRỌNG: Cập nhật luôn truyện đang đọc để số sao nhảy ngay lập tức trên màn hình
     setSelectedBook(updatedBooks.find(b => b.id === bookId));
-    
     showMsg("Cảm ơn bạn đã tặng sao ủng hộ tác giả!");
   };
 
@@ -330,11 +376,21 @@ export default function App() {
   const handleRoll = () => {
     const candidates = books.filter(b => (b.sao || 0) >= 0);
     if (candidates.length === 0) {
-      showMsg("Chưa có truyện nào được xếp hạng để gieo quẻ!");
+      showMsg("Chưa có truyện nào để gieo quẻ!");
       return;
     }
     const random = candidates[Math.floor(Math.random() * candidates.length)];
     setRandomBookModal(random);
+  };
+
+  // Thêm Tag tùy chỉnh
+  const handleAddCustomTag = () => {
+    if (!customTagInput.trim()) return;
+    const tag = customTagInput.trim();
+    if (!formTags.includes(tag)) {
+      setFormTags([...formTags, tag]);
+    }
+    setCustomTagInput('');
   };
 
   const handlePublish = () => {
@@ -361,15 +417,63 @@ export default function App() {
     setActiveTab('books');
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = (e, callback) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setBookForm({ ...bookForm, cover: reader.result }); // Lưu ảnh dạng Base64
+        callback(reader.result);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // QUẢN LÝ TRUYỆN DÀNH CHO TÁC GIẢ
+  const handleSaveBookDetails = () => {
+    if (!editingBook) return;
+    setBooks(books.map(b => b.id === editingBook.id ? editingBook : b));
+    setEditingBook(null);
+    showMsg("Đã cập nhật thông tin truyện!");
+  };
+
+  const handleAddChapterSubmit = () => {
+    if (!newChapterModal.title || !newChapterModal.content) {
+      showMsg("Vui lòng điền đầy đủ tiêu đề và nội dung chương!");
+      return;
+    }
+    setBooks(books.map(b => {
+      if (b.id === newChapterModal.bookId) {
+        const newCh = {
+          id: Date.now(),
+          title: newChapterModal.title,
+          content: newChapterModal.content,
+          sao: 0,
+          views: 0
+        };
+        return { ...b, chapters: [...b.chapters, newCh] };
+      }
+      return b;
+    }));
+    setNewChapterModal({ show: false, bookId: null, title: '', content: '' });
+    showMsg("Đã thêm chương mới thành công!");
+  };
+
+  const handleEditChapterSubmit = () => {
+    if (!editChapterModal.title || !editChapterModal.content) {
+      showMsg("Vui lòng điền đầy đủ tiêu đề và nội dung!");
+      return;
+    }
+    setBooks(books.map(b => {
+      if (b.id === editChapterModal.bookId) {
+        return {
+          ...b,
+          chapters: b.chapters.map(c => c.id === editChapterModal.chapterId ? { ...c, title: editChapterModal.title, content: editChapterModal.content } : c)
+        };
+      }
+      return b;
+    }));
+    setEditChapterModal({ show: false, bookId: null, chapterId: null, title: '', content: '' });
+    showMsg("Đã cập nhật nội dung chương!");
   };
 
   // ================= VIEW COMPONENTS =================
@@ -529,14 +633,26 @@ export default function App() {
         <div className="bg-[#FFDAC1]/20 p-4 border-t border-[#FFDAC1]/50 flex items-center justify-between">
           <button 
             disabled={readingChapterIndex === 0}
-            onClick={() => { setReadingChapterIndex(readingChapterIndex - 1); increaseView(selectedBook.id, selectedBook.chapters[readingChapterIndex - 1].id); window.scrollTo(0,0); }}
+            onClick={() => { 
+              const nextIdx = readingChapterIndex - 1;
+              setReadingChapterIndex(nextIdx); 
+              saveReadingProgress(selectedBook.id, nextIdx);
+              increaseView(selectedBook.id, selectedBook.chapters[nextIdx].id); 
+              window.scrollTo(0,0); 
+            }}
             className="px-4 py-2 font-bold text-sm text-slate-600 disabled:opacity-30 flex items-center gap-1 hover:text-[#FF9AA2]"
           >
             <ChevronLeft className="w-4 h-4"/> Chương trước
           </button>
           <button 
             disabled={readingChapterIndex === selectedBook.chapters.length - 1}
-            onClick={() => { setReadingChapterIndex(readingChapterIndex + 1); increaseView(selectedBook.id, selectedBook.chapters[readingChapterIndex + 1].id); window.scrollTo(0,0); }}
+            onClick={() => { 
+              const nextIdx = readingChapterIndex + 1;
+              setReadingChapterIndex(nextIdx); 
+              saveReadingProgress(selectedBook.id, nextIdx);
+              increaseView(selectedBook.id, selectedBook.chapters[nextIdx].id); 
+              window.scrollTo(0,0); 
+            }}
             className="px-4 py-2 font-bold text-sm text-slate-600 disabled:opacity-30 flex items-center gap-1 hover:text-[#FF9AA2]"
           >
             Chương sau <ChevronRight className="w-4 h-4"/>
@@ -593,8 +709,12 @@ export default function App() {
             {[
               { id: 'home', label: 'Trang chủ', IconComp: Sparkles },
               { id: 'books', label: 'Thư viện', IconComp: BookOpen },
+              ...(currentUser ? [{ id: 'bookshelf', label: 'Tủ sách của tôi', IconComp: Bookmark }] : []),
               { id: 'forum', label: 'Diễn đàn', IconComp: MessageSquare },
-              ...(userRole === 'Author' || userRole === 'Admin' ? [{ id: 'publish', label: 'Đăng Truyện', IconComp: PlusCircle }] : [])
+              ...(userRole === 'Author' || userRole === 'Admin' ? [
+                { id: 'manage', label: 'Quản lý truyện', IconComp: Settings },
+                { id: 'publish', label: 'Đăng Truyện', IconComp: PlusCircle }
+              ] : [])
             ].map(tab => (
               <button
                 key={tab.id}
@@ -615,21 +735,50 @@ export default function App() {
               <div className="flex flex-col md:flex-row gap-8">
                 <img src={selectedBook.cover} alt="Cover" className="w-48 h-72 object-cover rounded-2xl shadow-lg shrink-0 mx-auto md:mx-0" />
                 <div className="flex-1">
-                  <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 mb-2">{selectedBook.title}</h1>
+                  <div className="flex justify-between items-start">
+                    <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 mb-2">{selectedBook.title}</h1>
+                    
+                    {/* NÚT LƯU TRUYỆN VÀO TỦ SÁCH */}
+                    <button 
+                      onClick={() => toggleSaveBook(selectedBook.id)} 
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-all ${isBookSaved(selectedBook.id) ? 'bg-[#FF9AA2] text-white border-[#FF9AA2]' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
+                    >
+                      <Bookmark className="w-4 h-4" /> {isBookSaved(selectedBook.id) ? 'Đã lưu' : 'Lưu truyện'}
+                    </button>
+                  </div>
+
                   <p className="text-lg font-bold text-slate-600 mb-4 flex items-center">
                     Tác giả: <span className="text-[#FF9AA2] ml-2">{selectedBook.author}</span>
                     {getAuthorKhiVanBadge(selectedBook.sao || 0)}
                   </p>
+
                   <div className="flex flex-wrap gap-2 mb-4">
                     {selectedBook.tags.map(tag => (
                       <span key={tag} className="px-3 py-1 bg-[#E2F0CB] text-emerald-800 text-xs font-bold rounded-full">{tag}</span>
                     ))}
                   </div>
+                  
                   <div className="flex items-center gap-4 text-sm font-bold text-slate-500 mb-6 border-y border-slate-100 dark:border-slate-700 py-3">
                     <span className="flex items-center gap-1"><BookOpen className="w-4 h-4" /> {selectedBook.chapters.length} Chương</span>
                     <span className="flex items-center gap-1 text-[#D37340]"><Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /> {selectedBook.sao || 0} Khí vận</span>
                     <span className="flex items-center gap-1"><Eye className="w-4 h-4" /> {selectedBook.views || 0} Lượt xem</span>
                   </div>
+
+                  {/* NÚT TIẾP TỤC ĐỌC */}
+                  {currentUser && (
+                    <button 
+                      onClick={() => {
+                        const savedIdx = getSavedChapterIndex(selectedBook.id);
+                        setReadingChapterIndex(savedIdx);
+                        increaseView(selectedBook.id, selectedBook.chapters[savedIdx].id);
+                        window.scrollTo(0,0);
+                      }}
+                      className="mb-6 w-full sm:w-auto px-6 py-3 bg-[#FF9AA2] hover:bg-[#FFB7B2] text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2"
+                    >
+                      <BookOpen className="w-4 h-4" /> Tiếp tục đọc (Chương {getSavedChapterIndex(selectedBook.id) + 1})
+                    </button>
+                  )}
+
                   <h3 className="font-bold text-lg mb-2">Văn án:</h3>
                   <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedBook.summary}</p>
                   
@@ -647,7 +796,12 @@ export default function App() {
                   {selectedBook.chapters.map((ch, idx) => (
                     <button 
                       key={ch.id} 
-                      onClick={() => { setReadingChapterIndex(idx); increaseView(selectedBook.id, ch.id); window.scrollTo(0,0); }}
+                      onClick={() => { 
+                        setReadingChapterIndex(idx); 
+                        saveReadingProgress(selectedBook.id, idx);
+                        increaseView(selectedBook.id, ch.id); 
+                        window.scrollTo(0,0); 
+                      }}
                       className="text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#FF9AA2] hover:bg-[#FFDAC1]/10 transition-colors flex justify-between items-center group"
                     >
                       <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-[#FF9AA2] truncate pr-4">{ch.title}</span>
@@ -682,6 +836,123 @@ export default function App() {
               </div>
             )}
 
+            {/* TAB: TỦ SÁCH CỦA TÔI */}
+            {activeTab === 'bookshelf' && currentUser && (
+              <div className="space-y-6 max-w-5xl mx-auto">
+                <h2 className="text-2xl font-black text-[#FF9AA2] mb-4 flex items-center gap-2"><Bookmark className="w-6 h-6"/> Tủ Sách Của Tôi</h2>
+                
+                {(!savedBookIds[currentUser.username] || savedBookIds[currentUser.username].length === 0) ? (
+                  <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200">
+                    <p className="text-slate-500">Tủ sách của bạn đang trống. Hãy tìm truyện yêu thích và bấm nút "Lưu truyện" nhé!</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {books.filter(b => isBookSaved(b.id)).map(book => {
+                      const lastChapterIdx = getSavedChapterIndex(book.id);
+                      return (
+                        <div key={book.id} className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex gap-4">
+                          <img src={book.cover} alt="cover" className="w-20 h-28 object-cover rounded-xl shrink-0" />
+                          <div className="flex-1 flex flex-col justify-between">
+                            <div>
+                              <h3 className="font-bold text-slate-800 dark:text-slate-100 line-clamp-1">{book.title}</h3>
+                              <p className="text-xs text-slate-500 mt-0.5">Tác giả: {book.author}</p>
+                              <p className="text-xs text-[#FF9AA2] font-bold mt-2">Đang đọc: {book.chapters[lastChapterIdx]?.title || 'Chương 1'}</p>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <button 
+                                onClick={() => {
+                                  setSelectedBook(book);
+                                  setReadingChapterIndex(lastChapterIdx);
+                                  saveReadingProgress(book.id, lastChapterIdx);
+                                  increaseView(book.id, book.chapters[lastChapterIdx].id);
+                                  window.scrollTo(0,0);
+                                }}
+                                className="px-3 py-1.5 bg-[#FF9AA2] text-white text-xs font-bold rounded-lg hover:bg-[#FFB7B2]"
+                              >
+                                Tiếp tục đọc
+                              </button>
+                              <button 
+                                onClick={() => toggleSaveBook(book.id)} 
+                                className="px-3 py-1.5 bg-red-50 text-red-500 text-xs font-bold rounded-lg hover:bg-red-100"
+                              >
+                                Bỏ lưu
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: QUẢN LÝ TRUYỆN (Dành riêng cho Tác giả & Admin) */}
+            {activeTab === 'manage' && (userRole === 'Author' || userRole === 'Admin') && (
+              <div className="max-w-5xl mx-auto space-y-6">
+                <h2 className="text-2xl font-black text-[#FF9AA2] mb-4 flex items-center gap-2"><Settings className="w-6 h-6"/> Quản Lý Truyện Đã Đăng</h2>
+
+                {books.filter(b => userRole === 'Admin' || b.author === currentUser.username).length === 0 ? (
+                  <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200">
+                    <p className="text-slate-500">Bạn chưa đăng tác phẩm nào. Hãy bấm sang tab "Đăng Truyện" để sáng tác nhé!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {books.filter(b => userRole === 'Admin' || b.author === currentUser.username).map(book => (
+                      <div key={book.id} className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-200 dark:border-slate-700 shadow-md">
+                        <div className="flex flex-col md:flex-row gap-6">
+                          <img src={book.cover} alt="cover" className="w-32 h-44 object-cover rounded-2xl shrink-0 mx-auto md:mx-0 shadow-md" />
+                          <div className="flex-1 space-y-3">
+                            <div className="flex justify-between items-start">
+                              <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">{book.title}</h3>
+                              <button 
+                                onClick={() => setEditingBook(book)}
+                                className="px-3 py-1.5 bg-blue-50 text-blue-600 font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-blue-100"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" /> Sửa ảnh & văn án
+                              </button>
+                            </div>
+                            
+                            <p className="text-xs text-slate-500 line-clamp-2">{book.summary}</p>
+                            
+                            <div className="flex gap-2">
+                              {book.tags.map(t => <span key={t} className="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-xs font-bold rounded-full">{t}</span>)}
+                            </div>
+
+                            <div className="border-t pt-4 mt-4">
+                              <div className="flex justify-between items-center mb-3">
+                                <h4 className="font-bold text-sm text-slate-700 dark:text-slate-200">Danh sách chương ({book.chapters.length})</h4>
+                                <button 
+                                  onClick={() => setNewChapterModal({ show: true, bookId: book.id, title: '', content: '' })}
+                                  className="px-3 py-1.5 bg-[#FF9AA2] text-white font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-[#FFB7B2]"
+                                >
+                                  <PlusCircle className="w-3.5 h-3.5" /> Thêm chương mới
+                                </button>
+                              </div>
+
+                              <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                {book.chapters.map(ch => (
+                                  <div key={ch.id} className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold">
+                                    <span className="truncate pr-4">{ch.title}</span>
+                                    <button 
+                                      onClick={() => setEditChapterModal({ show: true, bookId: book.id, chapterId: ch.id, title: ch.title, content: ch.content })}
+                                      className="text-blue-500 hover:underline shrink-0"
+                                    >
+                                      Sửa nội dung
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === 'forum' && (
               <div className="max-w-3xl mx-auto space-y-6">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-4">Diễn Đàn Độc Giả</h2>
@@ -713,8 +984,6 @@ export default function App() {
                 <div className="space-y-4">
                   {reviews.map(r => (
                     <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative group">
-                      
-                      {/* NÚT XOÁ BÀI DÀNH CHO ADMIN */}
                       {userRole === 'Admin' && (
                         <button 
                           onClick={() => handleDeleteReview(r.id)} 
@@ -729,7 +998,6 @@ export default function App() {
                         <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                           {r.author} {getReputationBadge(r.authorReputation, r.authorRole)}
                         </div>
-                        {/* Lùi số tim sang trái một chút để không đè lên nút Xoá của admin */}
                         <button onClick={() => handleLikeReview(r.id)} className={`flex items-center gap-1 text-xs font-bold text-[#FF9AA2] bg-[#FFDAC1]/30 px-3 py-1 rounded-full ${userRole === 'Admin' ? 'mr-10' : ''}`}>
                           <Heart className="w-3.5 h-3.5 fill-[#FF9AA2]" /> {r.likes}
                         </button>
@@ -741,6 +1009,7 @@ export default function App() {
               </div>
             )}
 
+            {/* TAB: ĐĂNG TRUYỆN MỚI */}
             {activeTab === 'publish' && (userRole === 'Author' || userRole === 'Admin') && (
               <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 border border-[#FFDAC1]/50">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-6 flex items-center gap-2"><PlusCircle className="w-6 h-6"/> Đăng Tác Phẩm Mới</h2>
@@ -756,7 +1025,7 @@ export default function App() {
                       <input 
                         type="file" 
                         accept="image/*"
-                        onChange={handleImageUpload} 
+                        onChange={(e) => handleImageUpload(e, (imgData) => setBookForm({...bookForm, cover: imgData}))} 
                         className="w-full px-4 py-2 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#FFDAC1] file:text-[#D37340] hover:file:bg-[#FFB7B2] cursor-pointer" 
                       />
                       {bookForm.cover && bookForm.cover.startsWith('data:image') && (
@@ -767,9 +1036,10 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* THỂ LOẠI (TAGS TỰ DO) */}
                   <div>
-                    <label className="block text-sm font-bold mb-2">Thể loại (gõ rồi chọn)</label>
-                    <div className="flex gap-2 mb-2">
+                    <label className="block text-sm font-bold mb-2">Thể loại (Chọn hoặc tự gõ thêm tag mới)</label>
+                    <div className="flex flex-wrap gap-2 mb-3">
                       {['Trinh thám', 'Kinh dị', 'Tình cảm', 'Cổ đại', 'Huyền huyễn'].map(tag => (
                         <button 
                           key={tag} 
@@ -781,6 +1051,31 @@ export default function App() {
                         </button>
                       ))}
                     </div>
+
+                    {/* Ô TỰ GÕ TAG MỚI */}
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Gõ tag tự chỉnh (VD: Trọng sinh, Ngược văn)..." 
+                        value={customTagInput}
+                        onChange={e => setCustomTagInput(e.target.value)}
+                        onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleAddCustomTag(); } }}
+                        className="flex-1 px-4 py-2 rounded-xl border bg-slate-50 dark:bg-slate-900 text-xs font-bold outline-none"
+                      />
+                      <button type="button" onClick={handleAddCustomTag} className="px-4 py-2 bg-[#D37340] text-white font-bold rounded-xl text-xs">Thêm Tag</button>
+                    </div>
+
+                    {/* HIỂN THỊ CÁC TAG ĐÃ CHỌN */}
+                    {formTags.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1.5 items-center">
+                        <span className="text-xs font-bold text-slate-400">Tag đã thêm:</span>
+                        {formTags.map(t => (
+                          <span key={t} className="px-2.5 py-0.5 bg-[#E2F0CB] text-emerald-800 text-xs font-bold rounded-full flex items-center gap-1">
+                            {t} <X className="w-3 h-3 cursor-pointer" onClick={() => setFormTags(formTags.filter(item => item !== t))} />
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -803,6 +1098,78 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* MODAL ĐẢM BẢO SỬA ẢNH & VĂN ÁN TRUYỆN */}
+      {editingBook && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-blue-200">
+            <button onClick={() => setEditingBook(null)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+            <h3 className="text-xl font-black text-blue-500 mb-4">Sửa Thông Tin Truyện</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1">Tên truyện</label>
+                <input type="text" value={editingBook.title} onChange={e => setEditingBook({...editingBook, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border text-sm font-bold bg-slate-50 dark:bg-slate-900 outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1">Thay đổi Ảnh Bìa</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => handleImageUpload(e, (imgData) => setEditingBook({...editingBook, cover: imgData}))} 
+                  className="w-full text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1">Văn án / Giới thiệu</label>
+                <textarea rows="5" value={editingBook.summary} onChange={e => setEditingBook({...editingBook, summary: e.target.value})} className="w-full px-4 py-2 rounded-xl border text-sm bg-slate-50 dark:bg-slate-900 outline-none" />
+              </div>
+
+              <button onClick={handleSaveBookDetails} className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl shadow-md">
+                Lưu Thay Đổi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL THÊM CHƯƠNG MỚI */}
+      {newChapterModal.show && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-[#FFDAC1]">
+            <button onClick={() => setNewChapterModal({ show: false, bookId: null, title: '', content: '' })} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+            <h3 className="text-xl font-black text-[#FF9AA2] mb-4">Thêm Chương Mới</h3>
+            
+            <div className="space-y-4">
+              <input type="text" placeholder="Tên chương (VD: Chương 2: Chuyến đi mới)" value={newChapterModal.title} onChange={e => setNewChapterModal({...newChapterModal, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border text-sm font-bold bg-slate-50 dark:bg-slate-900 outline-none" />
+              <textarea rows="8" placeholder="Nội dung chương..." value={newChapterModal.content} onChange={e => setNewChapterModal({...newChapterModal, content: e.target.value})} className="w-full px-4 py-3 rounded-xl border text-sm bg-slate-50 dark:bg-slate-900 outline-none" />
+              <button onClick={handleAddChapterSubmit} className="w-full py-3 bg-[#FF9AA2] text-white font-bold rounded-xl shadow-md">
+                Xuất Bản Chương Này
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SỬA CHƯƠNG CŨ */}
+      {editChapterModal.show && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-blue-200">
+            <button onClick={() => setEditChapterModal({ show: false, bookId: null, chapterId: null, title: '', content: '' })} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+            <h3 className="text-xl font-black text-blue-500 mb-4">Sửa Nội Dung Chương</h3>
+            
+            <div className="space-y-4">
+              <input type="text" value={editChapterModal.title} onChange={e => setEditChapterModal({...editChapterModal, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border text-sm font-bold bg-slate-50 dark:bg-slate-900 outline-none" />
+              <textarea rows="8" value={editChapterModal.content} onChange={e => setEditChapterModal({...editChapterModal, content: e.target.value})} className="w-full px-4 py-3 rounded-xl border text-sm bg-slate-50 dark:bg-slate-900 outline-none" />
+              <button onClick={handleEditChapterSubmit} className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl shadow-md">
+                Lưu Chương Đã Sửa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL ĐĂNG NHẬP / ĐĂNG KÝ */}
       {showAuthModal && (
@@ -832,7 +1199,7 @@ export default function App() {
                   <label className="block text-xs font-bold mb-1">Bạn muốn làm:</label>
                   <select value={authForm.role} onChange={e => setAuthForm({...authForm, role: e.target.value})} className="w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none text-sm font-bold">
                     <option value="Reader">Độc giả (Chỉ đọc & bình luận)</option>
-                    <option value="Author">Tác giả (Được đăng truyện)</option>
+                    <option value="Author">Tác giả (Được đăng & quản lý truyện)</option>
                   </select>
                 </div>
               )}
