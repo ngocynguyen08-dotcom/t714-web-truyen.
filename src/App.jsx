@@ -311,6 +311,18 @@ export default function App() {
     setActiveTab('books');
   };
 
+  // Hàm xử lý upload ảnh
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setBookForm({ ...bookForm, cover: reader.result }); // Lưu ảnh dạng Base64
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // ================= VIEW COMPONENTS =================
   const renderHome = () => {
     const topSaoBooks = [...books].sort((a, b) => (b.sao || 0) - (a.sao || 0)).slice(0, 10);
@@ -511,7 +523,6 @@ export default function App() {
                     {currentUser.role === 'Admin' ? 'Admin' : currentUser.role === 'Author' ? 'Tác giả' : 'Độc giả'}
                   </span>
                 </div>
-                {/* NÚT ĐỔI MẬT KHẨU MỚI */}
                 <button onClick={() => setShowChangePass(true)} title="Đổi mật khẩu" className="p-2 rounded-xl border border-blue-200 text-blue-500 hover:bg-blue-50 transition-colors">
                   <Lock className="w-4 h-4" />
                 </button>
@@ -680,9 +691,23 @@ export default function App() {
                     <input type="text" placeholder="Tên truyện..." value={bookForm.title} onChange={e=>setBookForm({...bookForm, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none font-bold" />
                   </div>
 
+                  {/* THAY ĐỔI Ở ĐÂY: NUT UPLOAD FILE TỪ MÁY TÍNH */}
                   <div>
-                    <label className="block text-sm font-bold mb-2">Link Ảnh Bìa (URL)</label>
-                    <input type="text" placeholder="https://..." value={bookForm.cover} onChange={e=>setBookForm({...bookForm, cover: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm" />
+                    <label className="block text-sm font-bold mb-2">Tải Ảnh Bìa Lên</label>
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={handleImageUpload} 
+                        className="w-full px-4 py-2 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#FFDAC1] file:text-[#D37340] hover:file:bg-[#FFB7B2] cursor-pointer" 
+                      />
+                      {/* Hiển thị ảnh thu nhỏ khi đã chọn ảnh */}
+                      {bookForm.cover && bookForm.cover.startsWith('data:image') && (
+                        <div className="shrink-0">
+                          <img src={bookForm.cover} alt="Preview" className="w-12 h-16 object-cover rounded-md shadow-md" />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
