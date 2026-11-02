@@ -244,6 +244,12 @@ export default function App() {
     }));
   };
 
+  // THÊM: HÀM XOÁ BÀI TRÊN DIỄN ĐÀN (Dành cho Admin)
+  const handleDeleteReview = (reviewId) => {
+    setReviews(reviews.filter(r => r.id !== reviewId));
+    showMsg("Đã xoá bài đăng trên diễn đàn.");
+  };
+
   const handleAddSaoSongTu = (bookId, chapterId) => {
     if (!currentUser) {
       showMsg("Vui lòng đăng nhập để tặng sao!");
@@ -300,6 +306,7 @@ export default function App() {
     
     showMsg("Cảm ơn bạn đã tặng sao ủng hộ tác giả!");
   };
+
   const increaseView = (bookId, chapterId) => {
     setBooks(prev => prev.map(b => {
       if (b.id === bookId) {
@@ -354,7 +361,6 @@ export default function App() {
     setActiveTab('books');
   };
 
-  // Hàm xử lý upload ảnh
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -507,10 +513,7 @@ export default function App() {
         <div className="py-12 border-t border-[#FFDAC1]/50 flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-800/20">
           <p className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Hết Chương</p>
           <button 
-            onClick={() => {
-              if(!currentUser) { showMsg("Vui lòng đăng nhập để tặng sao!"); return; }
-              handleAddSaoSongTu(selectedBook.id, chapter.id);
-            }}
+            onClick={() => handleAddSaoSongTu(selectedBook.id, chapter.id)}
             className="group flex flex-col items-center gap-2"
           >
             <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-yellow-400 to-[#FF9AA2] p-0.5 shadow-lg group-hover:scale-110 transition-transform">
@@ -709,12 +712,25 @@ export default function App() {
 
                 <div className="space-y-4">
                   {reviews.map(r => (
-                    <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <div key={r.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative group">
+                      
+                      {/* NÚT XOÁ BÀI DÀNH CHO ADMIN */}
+                      {userRole === 'Admin' && (
+                        <button 
+                          onClick={() => handleDeleteReview(r.id)} 
+                          className="absolute top-4 right-4 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                          title="Xoá bài đăng này"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <div className="flex justify-between items-start mb-2">
                         <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                           {r.author} {getReputationBadge(r.authorReputation, r.authorRole)}
                         </div>
-                        <button onClick={() => handleLikeReview(r.id)} className="flex items-center gap-1 text-xs font-bold text-[#FF9AA2] bg-[#FFDAC1]/30 px-3 py-1 rounded-full">
+                        {/* Lùi số tim sang trái một chút để không đè lên nút Xoá của admin */}
+                        <button onClick={() => handleLikeReview(r.id)} className={`flex items-center gap-1 text-xs font-bold text-[#FF9AA2] bg-[#FFDAC1]/30 px-3 py-1 rounded-full ${userRole === 'Admin' ? 'mr-10' : ''}`}>
                           <Heart className="w-3.5 h-3.5 fill-[#FF9AA2]" /> {r.likes}
                         </button>
                       </div>
@@ -734,7 +750,6 @@ export default function App() {
                     <input type="text" placeholder="Tên truyện..." value={bookForm.title} onChange={e=>setBookForm({...bookForm, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none font-bold" />
                   </div>
 
-                  {/* THAY ĐỔI Ở ĐÂY: NUT UPLOAD FILE TỪ MÁY TÍNH */}
                   <div>
                     <label className="block text-sm font-bold mb-2">Tải Ảnh Bìa Lên</label>
                     <div className="flex items-center gap-4">
@@ -744,7 +759,6 @@ export default function App() {
                         onChange={handleImageUpload} 
                         className="w-full px-4 py-2 rounded-xl border focus:border-[#FF9AA2] bg-slate-50 dark:bg-slate-900 outline-none text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#FFDAC1] file:text-[#D37340] hover:file:bg-[#FFB7B2] cursor-pointer" 
                       />
-                      {/* Hiển thị ảnh thu nhỏ khi đã chọn ảnh */}
                       {bookForm.cover && bookForm.cover.startsWith('data:image') && (
                         <div className="shrink-0">
                           <img src={bookForm.cover} alt="Preview" className="w-12 h-16 object-cover rounded-md shadow-md" />
