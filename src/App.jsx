@@ -95,12 +95,12 @@ export default function App() {
   // Tủ sách & Tiến trình đọc (Saved Books & Reading Progress)
   const [savedBookIds, setSavedBookIds] = useState(() => {
     const saved = localStorage.getItem('t714_saved_books');
-    return saved ? JSON.parse(saved) : {}; // Cấu trúc: { username: [bookId1, bookId2] }
+    return saved ? JSON.parse(saved) : {};
   });
 
   const [readingProgress, setReadingProgress] = useState(() => {
     const saved = localStorage.getItem('t714_reading_progress');
-    return saved ? JSON.parse(saved) : {}; // Cấu trúc: { "username_bookId": chapterIndex }
+    return saved ? JSON.parse(saved) : {};
   });
 
   // Tự động đồng bộ với LocalStorage
@@ -145,8 +145,8 @@ export default function App() {
   const [customTagInput, setCustomTagInput] = useState('');
   const [chaptersForm, setChaptersForm] = useState([{ title: '', content: '' }]);
 
-  // Author Management State (Quản lý truyện của Tác giả)
-  const [editingBook, setEditingBook] = useState(null); // Book đang được sửa
+  // Author Management State (Quản lý truyện)
+  const [editingBook, setEditingBook] = useState(null);
   const [newChapterModal, setNewChapterModal] = useState({ show: false, bookId: null, title: '', content: '' });
   const [editChapterModal, setEditChapterModal] = useState({ show: false, bookId: null, chapterId: null, title: '', content: '' });
 
@@ -368,9 +368,24 @@ export default function App() {
 
   const handleDeleteBook = (bookId) => {
     setBooks(books.filter(b => b.id !== bookId));
-    setSelectedBook(null);
-    setActiveTab('home');
+    if (selectedBook && selectedBook.id === bookId) {
+      setSelectedBook(null);
+    }
     showMsg("Đã xoá truyện thành công!");
+  };
+
+  // XOÁ TỪNG CHƯƠNG TRONG QUẢN LÝ TRUYỆN
+  const handleDeleteChapter = (bookId, chapterId) => {
+    setBooks(books.map(b => {
+      if (b.id === bookId) {
+        return {
+          ...b,
+          chapters: b.chapters.filter(c => c.id !== chapterId)
+        };
+      }
+      return b;
+    }));
+    showMsg("Đã xoá chương!");
   };
 
   const handleRoll = () => {
@@ -383,7 +398,6 @@ export default function App() {
     setRandomBookModal(random);
   };
 
-  // Thêm Tag tùy chỉnh
   const handleAddCustomTag = () => {
     if (!customTagInput.trim()) return;
     const tag = customTagInput.trim();
@@ -428,7 +442,7 @@ export default function App() {
     }
   };
 
-  // QUẢN LÝ TRUYỆN DÀNH CHO TÁC GIẢ
+  // QUẢN LÝ TRUYỆN DÀNH CHO TÁC GIẢ & ADMIN
   const handleSaveBookDetails = () => {
     if (!editingBook) return;
     setBooks(books.map(b => b.id === editingBook.id ? editingBook : b));
@@ -738,7 +752,6 @@ export default function App() {
                   <div className="flex justify-between items-start">
                     <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 mb-2">{selectedBook.title}</h1>
                     
-                    {/* NÚT LƯU TRUYỆN VÀO TỦ SÁCH */}
                     <button 
                       onClick={() => toggleSaveBook(selectedBook.id)} 
                       className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-all ${isBookSaved(selectedBook.id) ? 'bg-[#FF9AA2] text-white border-[#FF9AA2]' : 'bg-slate-50 text-slate-600 border-slate-200'}`}
@@ -764,8 +777,7 @@ export default function App() {
                     <span className="flex items-center gap-1"><Eye className="w-4 h-4" /> {selectedBook.views || 0} Lượt xem</span>
                   </div>
 
-                  {/* NÚT TIẾP TỤC ĐỌC */}
-                  {currentUser && (
+                  {currentUser && selectedBook.chapters.length > 0 && (
                     <button 
                       onClick={() => {
                         const savedIdx = getSavedChapterIndex(selectedBook.id);
@@ -782,9 +794,9 @@ export default function App() {
                   <h3 className="font-bold text-lg mb-2">Văn án:</h3>
                   <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedBook.summary}</p>
                   
-                  {userRole === 'Admin' && (
+                  {(userRole === 'Admin' || (userRole === 'Author' && selectedBook.author === currentUser?.username)) && (
                     <button onClick={() => handleDeleteBook(selectedBook.id)} className="mt-6 flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-600 font-bold rounded-xl transition-colors">
-                      <Trash2 className="w-4 h-4" /> Xoá Truyện Này (Admin)
+                      <Trash2 className="w-4 h-4" /> Xoá Truyện Này
                     </button>
                   )}
                 </div>
@@ -887,7 +899,7 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: QUẢN LÝ TRUYỆN (Dành riêng cho Tác giả & Admin) */}
+            {/* TAB: QUẢN LÝ TRUYỆN (BỔ SUNG NÚT XOÁ TRUYỆN & XOÁ CHƯƠNG) */}
             {activeTab === 'manage' && (userRole === 'Author' || userRole === 'Admin') && (
               <div className="max-w-5xl mx-auto space-y-6">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-4 flex items-center gap-2"><Settings className="w-6 h-6"/> Quản Lý Truyện Đã Đăng</h2>
@@ -903,14 +915,25 @@ export default function App() {
                         <div className="flex flex-col md:flex-row gap-6">
                           <img src={book.cover} alt="cover" className="w-32 h-44 object-cover rounded-2xl shrink-0 mx-auto md:mx-0 shadow-md" />
                           <div className="flex-1 space-y-3">
-                            <div className="flex justify-between items-start">
+                            <div className="flex flex-wrap justify-between items-start gap-2">
                               <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">{book.title}</h3>
-                              <button 
-                                onClick={() => setEditingBook(book)}
-                                className="px-3 py-1.5 bg-blue-50 text-blue-600 font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-blue-100"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" /> Sửa ảnh & văn án
-                              </button>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => setEditingBook(book)}
+                                  className="px-3 py-1.5 bg-blue-50 text-blue-600 font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-blue-100"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" /> Sửa ảnh & văn án
+                                </button>
+
+                                {/* NÚT XOÁ TRUYỆN ĐÃ ĐƯỢC BỔ SUNG VÀO ĐÂY */}
+                                <button 
+                                  onClick={() => handleDeleteBook(book.id)}
+                                  className="px-3 py-1.5 bg-red-50 text-red-600 font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-red-100"
+                                  title="Xoá toàn bộ truyện này"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" /> Xoá truyện
+                                </button>
+                              </div>
                             </div>
                             
                             <p className="text-xs text-slate-500 line-clamp-2">{book.summary}</p>
@@ -934,12 +957,22 @@ export default function App() {
                                 {book.chapters.map(ch => (
                                   <div key={ch.id} className="flex justify-between items-center p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-bold">
                                     <span className="truncate pr-4">{ch.title}</span>
-                                    <button 
-                                      onClick={() => setEditChapterModal({ show: true, bookId: book.id, chapterId: ch.id, title: ch.title, content: ch.content })}
-                                      className="text-blue-500 hover:underline shrink-0"
-                                    >
-                                      Sửa nội dung
-                                    </button>
+                                    <div className="flex gap-3 shrink-0">
+                                      <button 
+                                        onClick={() => setEditChapterModal({ show: true, bookId: book.id, chapterId: ch.id, title: ch.title, content: ch.content })}
+                                        className="text-blue-500 hover:underline"
+                                      >
+                                        Sửa
+                                      </button>
+
+                                      {/* NÚT XOÁ CHƯƠNG */}
+                                      <button 
+                                        onClick={() => handleDeleteChapter(book.id, ch.id)}
+                                        className="text-red-500 hover:underline"
+                                      >
+                                        Xoá
+                                      </button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -1036,7 +1069,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* THỂ LOẠI (TAGS TỰ DO) */}
                   <div>
                     <label className="block text-sm font-bold mb-2">Thể loại (Chọn hoặc tự gõ thêm tag mới)</label>
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -1052,7 +1084,6 @@ export default function App() {
                       ))}
                     </div>
 
-                    {/* Ô TỰ GÕ TAG MỚI */}
                     <div className="flex gap-2">
                       <input 
                         type="text" 
@@ -1065,7 +1096,6 @@ export default function App() {
                       <button type="button" onClick={handleAddCustomTag} className="px-4 py-2 bg-[#D37340] text-white font-bold rounded-xl text-xs">Thêm Tag</button>
                     </div>
 
-                    {/* HIỂN THỊ CÁC TAG ĐÃ CHỌN */}
                     {formTags.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1.5 items-center">
                         <span className="text-xs font-bold text-slate-400">Tag đã thêm:</span>
@@ -1099,7 +1129,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL ĐẢM BẢO SỬA ẢNH & VĂN ÁN TRUYỆN */}
+      {/* MODAL SỬA ẢNH & VĂN ÁN TRUYỆN */}
       {editingBook && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-blue-200">
