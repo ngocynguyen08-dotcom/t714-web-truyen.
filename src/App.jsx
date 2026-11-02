@@ -3,7 +3,8 @@ import {
   BookOpen, Crown, Award, ThumbsUp, Shuffle, MessageSquare, 
   Shield, UserCheck, Moon, Sun, PlusCircle, Eye, CheckCircle, 
   Sparkles, Send, ImagePlus, Trash2, List, FileText, ChevronLeft, ChevronRight, Wand2,
-  MessageCircle, X, Hash, Star, LogIn, UserPlus, LogOut, Lock, User, Heart, Bookmark, Edit3, Settings
+  MessageCircle, X, Hash, Star, LogIn, UserPlus, LogOut, Lock, User, Heart, Bookmark, Edit3, Settings,
+  Save, Clock, ArrowLeft, Check
 } from 'lucide-react';
 
 const DEFAULT_LOGO_URL = "image_3c2d84.jpg";
@@ -92,7 +93,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Tủ sách & Tiến trình đọc (Saved Books & Reading Progress)
+  // Tủ sách & Tiến trình đọc
   const [savedBookIds, setSavedBookIds] = useState(() => {
     const saved = localStorage.getItem('t714_saved_books');
     return saved ? JSON.parse(saved) : {};
@@ -102,35 +103,6 @@ export default function App() {
     const saved = localStorage.getItem('t714_reading_progress');
     return saved ? JSON.parse(saved) : {};
   });
-
-  // Tự động đồng bộ với LocalStorage
-  useEffect(() => {
-    localStorage.setItem('t714_current_user', JSON.stringify(currentUser));
-  }, [currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('t714_users_db', JSON.stringify(usersDb));
-  }, [usersDb]);
-
-  useEffect(() => {
-    localStorage.setItem('t714_books', JSON.stringify(books));
-  }, [books]);
-
-  useEffect(() => {
-    localStorage.setItem('t714_reviews', JSON.stringify(reviews));
-  }, [reviews]);
-
-  useEffect(() => {
-    localStorage.setItem('t714_inline_comments', JSON.stringify(inlineComments));
-  }, [inlineComments]);
-
-  useEffect(() => {
-    localStorage.setItem('t714_saved_books', JSON.stringify(savedBookIds));
-  }, [savedBookIds]);
-
-  useEffect(() => {
-    localStorage.setItem('t714_reading_progress', JSON.stringify(readingProgress));
-  }, [readingProgress]);
 
   // Navigation & Modal State
   const [selectedBook, setSelectedBook] = useState(null);
@@ -145,10 +117,74 @@ export default function App() {
   const [customTagInput, setCustomTagInput] = useState('');
   const [chaptersForm, setChaptersForm] = useState([{ title: '', content: '' }]);
 
-  // Author Management State (Quản lý truyện)
+  // Author Management State
   const [editingBook, setEditingBook] = useState(null);
-  const [newChapterModal, setNewChapterModal] = useState({ show: false, bookId: null, title: '', content: '' });
-  const [editChapterModal, setEditChapterModal] = useState({ show: false, bookId: null, chapterId: null, title: '', content: '' });
+
+  // ================= TRANG VIẾT CHƯƠNG NÂNG CẤP (GOOGLE DOCS MODE) =================
+  const [editorState, setEditorState] = useState({
+    active: false,
+    mode: 'create', // 'create' hoặc 'edit'
+    bookId: null,
+    chapterId: null,
+    title: '',
+    content: ''
+  });
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'unsaved'
+
+  // Load bản nháp chưa xuất bản khi mở Editor
+  const openChapterEditor = (mode, bookId, chapter = null) => {
+    const draftKey = `t714_draft_${bookId}_${chapter ? chapter.id : 'new'}`;
+    const savedDraft = localStorage.getItem(draftKey);
+
+    let initialTitle = chapter ? chapter.title : '';
+    let initialContent = chapter ? chapter.content : '';
+
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        initialTitle = parsed.title || initialTitle;
+        initialContent = parsed.content || initialContent;
+      } catch (e) { console.error(e); }
+    }
+
+    setEditorState({
+      active: true,
+      mode,
+      bookId,
+      chapterId: chapter ? chapter.id : null,
+      title: initialTitle,
+      content: initialContent
+    });
+    setSaveStatus('saved');
+  };
+
+  // Tự động lưu bản nháp theo thời gian (Auto-Save)
+  useEffect(() => {
+    if (!editorState.active) return;
+
+    setSaveStatus('unsaved');
+    const timer = setTimeout(() => {
+      setSaveStatus('saving');
+      const draftKey = `t714_draft_${editorState.bookId}_${editorState.chapterId || 'new'}`;
+      localStorage.setItem(draftKey, JSON.stringify({
+        title: editorState.title,
+        content: editorState.content,
+        updatedAt: Date.now()
+      }));
+      setTimeout(() => setSaveStatus('saved'), 400);
+    }, 1000); // Lưu sau 1 giây dừng gõ
+
+    return () => clearTimeout(timer);
+  }, [editorState.title, editorState.content, editorState.active]);
+
+  // Đồng bộ LocalStorage chung
+  useEffect(() => { localStorage.setItem('t714_current_user', JSON.stringify(currentUser)); }, [currentUser]);
+  useEffect(() => { localStorage.setItem('t714_users_db', JSON.stringify(usersDb)); }, [usersDb]);
+  useEffect(() => { localStorage.setItem('t714_books', JSON.stringify(books)); }, [books]);
+  useEffect(() => { localStorage.setItem('t714_reviews', JSON.stringify(reviews)); }, [reviews]);
+  useEffect(() => { localStorage.setItem('t714_inline_comments', JSON.stringify(inlineComments)); }, [inlineComments]);
+  useEffect(() => { localStorage.setItem('t714_saved_books', JSON.stringify(savedBookIds)); }, [savedBookIds]);
+  useEffect(() => { localStorage.setItem('t714_reading_progress', JSON.stringify(readingProgress)); }, [readingProgress]);
 
   const userRole = currentUser ? currentUser.role : 'Guest';
 
@@ -374,7 +410,6 @@ export default function App() {
     showMsg("Đã xoá truyện thành công!");
   };
 
-  // XOÁ TỪNG CHƯƠNG TRONG QUẢN LÝ TRUYỆN
   const handleDeleteChapter = (bookId, chapterId) => {
     setBooks(books.map(b => {
       if (b.id === bookId) {
@@ -442,7 +477,6 @@ export default function App() {
     }
   };
 
-  // QUẢN LÝ TRUYỆN DÀNH CHO TÁC GIẢ & ADMIN
   const handleSaveBookDetails = () => {
     if (!editingBook) return;
     setBooks(books.map(b => b.id === editingBook.id ? editingBook : b));
@@ -450,44 +484,46 @@ export default function App() {
     showMsg("Đã cập nhật thông tin truyện!");
   };
 
-  const handleAddChapterSubmit = () => {
-    if (!newChapterModal.title || !newChapterModal.content) {
-      showMsg("Vui lòng điền đầy đủ tiêu đề và nội dung chương!");
+  // LƯU / XUẤT BẢN CHƯƠNG TỪ GOOGLE DOCS EDITOR
+  const handlePublishChapterFromEditor = () => {
+    if (!editorState.title.trim() || !editorState.content.trim()) {
+      showMsg("Vui lòng nhập đầy đủ tiêu đề và nội dung chương!");
       return;
     }
-    setBooks(books.map(b => {
-      if (b.id === newChapterModal.bookId) {
-        const newCh = {
-          id: Date.now(),
-          title: newChapterModal.title,
-          content: newChapterModal.content,
-          sao: 0,
-          views: 0
-        };
-        return { ...b, chapters: [...b.chapters, newCh] };
-      }
-      return b;
-    }));
-    setNewChapterModal({ show: false, bookId: null, title: '', content: '' });
-    showMsg("Đã thêm chương mới thành công!");
-  };
 
-  const handleEditChapterSubmit = () => {
-    if (!editChapterModal.title || !editChapterModal.content) {
-      showMsg("Vui lòng điền đầy đủ tiêu đề và nội dung!");
-      return;
+    if (editorState.mode === 'create') {
+      setBooks(books.map(b => {
+        if (b.id === editorState.bookId) {
+          const newCh = {
+            id: Date.now(),
+            title: editorState.title,
+            content: editorState.content,
+            sao: 0,
+            views: 0
+          };
+          return { ...b, chapters: [...b.chapters, newCh] };
+        }
+        return b;
+      }));
+      showMsg("Đã xuất bản chương mới!");
+    } else {
+      setBooks(books.map(b => {
+        if (b.id === editorState.bookId) {
+          return {
+            ...b,
+            chapters: b.chapters.map(c => c.id === editorState.chapterId ? { ...c, title: editorState.title, content: editorState.content } : c)
+          };
+        }
+        return b;
+      }));
+      showMsg("Đã lưu cập nhật nội dung chương!");
     }
-    setBooks(books.map(b => {
-      if (b.id === editChapterModal.bookId) {
-        return {
-          ...b,
-          chapters: b.chapters.map(c => c.id === editChapterModal.chapterId ? { ...c, title: editChapterModal.title, content: editChapterModal.content } : c)
-        };
-      }
-      return b;
-    }));
-    setEditChapterModal({ show: false, bookId: null, chapterId: null, title: '', content: '' });
-    showMsg("Đã cập nhật nội dung chương!");
+
+    // Xóa bản nháp tạm sau khi đã xuất bản chính thức
+    const draftKey = `t714_draft_${editorState.bookId}_${editorState.chapterId || 'new'}`;
+    localStorage.removeItem(draftKey);
+
+    setEditorState({ active: false, mode: 'create', bookId: null, chapterId: null, title: '', content: '' });
   };
 
   // ================= VIEW COMPONENTS =================
@@ -675,6 +711,81 @@ export default function App() {
       </div>
     );
   };
+
+  // ================= ĐỊNH DẠNG TRANG VIẾT GOOGLE DOCS EDITOR =================
+  if (editorState.active) {
+    const wordCount = editorState.content.trim() ? editorState.content.trim().split(/\s+/).length : 0;
+    const targetBook = books.find(b => b.id === editorState.bookId);
+
+    return (
+      <div className={`min-h-screen flex flex-col ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'}`}>
+        {/* THANH CÔNG CỤ TRÊN CÙNG */}
+        <header className={`sticky top-0 z-50 border-b px-6 py-3 flex items-center justify-between backdrop-blur-md ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setEditorState({ active: false, mode: 'create', bookId: null, chapterId: null, title: '', content: '' })}
+              className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-red-500 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Trở về Quản lý
+            </button>
+            <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
+            <div>
+              <span className="text-xs text-slate-400 font-bold block">{targetBook?.title || 'Đang sáng tác'}</span>
+              <span className="text-sm font-black text-[#FF9AA2]">
+                {editorState.mode === 'create' ? 'Tạo chương mới' : 'Chỉnh sửa chương'}
+              </span>
+            </div>
+          </div>
+
+          {/* TRẠNG THÁI LƯU TỰ ĐỘNG & NÚT XUẤT BẢN */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 text-xs font-bold">
+              {saveStatus === 'saving' && <span className="text-amber-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5 animate-spin"/> Đang tự động lưu...</span>}
+              {saveStatus === 'saved' && <span className="text-emerald-500 flex items-center gap-1"><Check className="w-3.5 h-3.5"/> Đã lưu nháp</span>}
+              {saveStatus === 'unsaved' && <span className="text-slate-400">Đang gõ...</span>}
+            </div>
+
+            <button 
+              onClick={handlePublishChapterFromEditor}
+              className="px-5 py-2 bg-[#FF9AA2] hover:bg-[#FFB7B2] text-white font-black rounded-xl shadow-md text-sm transition-transform hover:scale-105 flex items-center gap-2"
+            >
+              <Save className="w-4 h-4"/> {editorState.mode === 'create' ? 'Xuất Bản Chương' : 'Lưu Thay Đổi'}
+            </button>
+          </div>
+        </header>
+
+        {/* VÙNG VIẾT NHƯ GOOGLE DOCS */}
+        <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col">
+          <div className={`flex-1 rounded-2xl shadow-xl p-8 md:p-12 flex flex-col border ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            
+            {/* TIÊU ĐỀ CHƯƠNG */}
+            <input 
+              type="text" 
+              placeholder="Nhập tiêu đề chương (VD: Chương 1: Cuộc chạm trán)..." 
+              value={editorState.title}
+              onChange={e => setEditorState({ ...editorState, title: e.target.value })}
+              className="text-2xl md:text-3xl font-black mb-6 pb-3 border-b border-slate-100 dark:border-slate-800 outline-none bg-transparent text-[#D37340] placeholder-slate-300 dark:placeholder-slate-600"
+            />
+
+            {/* NỘI DUNG CHƯƠNG (TEXTAREA TỰ CO PHÂN) */}
+            <textarea 
+              placeholder="Bắt đầu viết câu chuyện của bạn tại đây... (Nội dung sẽ tự động lưu lại theo thời gian thực)" 
+              value={editorState.content}
+              onChange={e => setEditorState({ ...editorState, content: e.target.value })}
+              className="flex-1 w-full text-lg leading-relaxed outline-none resize-none bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 font-sans min-h-[500px]"
+            />
+
+            {/* ĐẾM SỐ TỪ */}
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-400 font-bold">
+              <span>Đã tự động bảo vệ chữ gõ tránh rớt mạng</span>
+              <span>Tổng số từ: <strong className="text-[#FF9AA2]">{wordCount}</strong> từ</span>
+            </div>
+
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
@@ -899,7 +1010,7 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: QUẢN LÝ TRUYỆN (BỔ SUNG NÚT XOÁ TRUYỆN & XOÁ CHƯƠNG) */}
+            {/* TAB: QUẢN LÝ TRUYỆN (SỬ DỤNG GOOGLE DOCS EDITOR MỚI) */}
             {activeTab === 'manage' && (userRole === 'Author' || userRole === 'Admin') && (
               <div className="max-w-5xl mx-auto space-y-6">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-4 flex items-center gap-2"><Settings className="w-6 h-6"/> Quản Lý Truyện Đã Đăng</h2>
@@ -924,12 +1035,9 @@ export default function App() {
                                 >
                                   <Edit3 className="w-3.5 h-3.5" /> Sửa ảnh & văn án
                                 </button>
-
-                                {/* NÚT XOÁ TRUYỆN ĐÃ ĐƯỢC BỔ SUNG VÀO ĐÂY */}
                                 <button 
                                   onClick={() => handleDeleteBook(book.id)}
                                   className="px-3 py-1.5 bg-red-50 text-red-600 font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-red-100"
-                                  title="Xoá toàn bộ truyện này"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" /> Xoá truyện
                                 </button>
@@ -946,10 +1054,10 @@ export default function App() {
                               <div className="flex justify-between items-center mb-3">
                                 <h4 className="font-bold text-sm text-slate-700 dark:text-slate-200">Danh sách chương ({book.chapters.length})</h4>
                                 <button 
-                                  onClick={() => setNewChapterModal({ show: true, bookId: book.id, title: '', content: '' })}
+                                  onClick={() => openChapterEditor('create', book.id)}
                                   className="px-3 py-1.5 bg-[#FF9AA2] text-white font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-[#FFB7B2]"
                                 >
-                                  <PlusCircle className="w-3.5 h-3.5" /> Thêm chương mới
+                                  <PlusCircle className="w-3.5 h-3.5" /> Viết chương mới (G-Docs Mode)
                                 </button>
                               </div>
 
@@ -959,13 +1067,11 @@ export default function App() {
                                     <span className="truncate pr-4">{ch.title}</span>
                                     <div className="flex gap-3 shrink-0">
                                       <button 
-                                        onClick={() => setEditChapterModal({ show: true, bookId: book.id, chapterId: ch.id, title: ch.title, content: ch.content })}
+                                        onClick={() => openChapterEditor('edit', book.id, ch)}
                                         className="text-blue-500 hover:underline"
                                       >
-                                        Sửa
+                                        Sửa chương
                                       </button>
-
-                                      {/* NÚT XOÁ CHƯƠNG */}
                                       <button 
                                         onClick={() => handleDeleteChapter(book.id, ch.id)}
                                         className="text-red-500 hover:underline"
@@ -1159,42 +1265,6 @@ export default function App() {
 
               <button onClick={handleSaveBookDetails} className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl shadow-md">
                 Lưu Thay Đổi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL THÊM CHƯƠNG MỚI */}
-      {newChapterModal.show && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-[#FFDAC1]">
-            <button onClick={() => setNewChapterModal({ show: false, bookId: null, title: '', content: '' })} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
-            <h3 className="text-xl font-black text-[#FF9AA2] mb-4">Thêm Chương Mới</h3>
-            
-            <div className="space-y-4">
-              <input type="text" placeholder="Tên chương (VD: Chương 2: Chuyến đi mới)" value={newChapterModal.title} onChange={e => setNewChapterModal({...newChapterModal, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border text-sm font-bold bg-slate-50 dark:bg-slate-900 outline-none" />
-              <textarea rows="8" placeholder="Nội dung chương..." value={newChapterModal.content} onChange={e => setNewChapterModal({...newChapterModal, content: e.target.value})} className="w-full px-4 py-3 rounded-xl border text-sm bg-slate-50 dark:bg-slate-900 outline-none" />
-              <button onClick={handleAddChapterSubmit} className="w-full py-3 bg-[#FF9AA2] text-white font-bold rounded-xl shadow-md">
-                Xuất Bản Chương Này
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL SỬA CHƯƠNG CŨ */}
-      {editChapterModal.show && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-blue-200">
-            <button onClick={() => setEditChapterModal({ show: false, bookId: null, chapterId: null, title: '', content: '' })} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X className="w-5 h-5"/></button>
-            <h3 className="text-xl font-black text-blue-500 mb-4">Sửa Nội Dung Chương</h3>
-            
-            <div className="space-y-4">
-              <input type="text" value={editChapterModal.title} onChange={e => setEditChapterModal({...editChapterModal, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border text-sm font-bold bg-slate-50 dark:bg-slate-900 outline-none" />
-              <textarea rows="8" value={editChapterModal.content} onChange={e => setEditChapterModal({...editChapterModal, content: e.target.value})} className="w-full px-4 py-3 rounded-xl border text-sm bg-slate-50 dark:bg-slate-900 outline-none" />
-              <button onClick={handleEditChapterSubmit} className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl shadow-md">
-                Lưu Chương Đã Sửa
               </button>
             </div>
           </div>
