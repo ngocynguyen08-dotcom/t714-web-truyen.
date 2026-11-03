@@ -366,6 +366,14 @@ export default function App() {
   };
 
   const handleDeleteBook = async (bookId) => {
+    const targetBook = books.find(b => b.id === bookId);
+    if (!targetBook) return;
+
+    if (userRole !== 'Admin' && targetBook.author !== currentUser.username) {
+      showMsg("Bạn chỉ có quyền xóa truyện do chính mình sáng tác!");
+      return;
+    }
+
     if (!window.confirm("Bạn có chắc chắn muốn xoá truyện này vĩnh viễn không?")) return;
     try {
       await deleteDoc(doc(db, "books", bookId));
