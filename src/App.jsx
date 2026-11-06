@@ -21,7 +21,6 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 const DEFAULT_LOGO_URL = "image_3c2d84.jpg";
 
 // ================= DỮ LIỆU MẪU BAN ĐẦU =================
-// (Chỉ còn dùng cho review, truyện đã chuyển lên Firebase)
 const INITIAL_REVIEWS = [
   { id: 1, bookId: 2, author: "Độc giả T714", authorRole: "Reader", authorReputation: 1200, text: "Truyện quá hay, đọc mà khóc hết nước mắt. Đề cử mạnh cho mọi người nhé! Mong tác giả ra thêm ngoại truyện.", likes: 45 },
   { id: 2, bookId: 1, author: "Người Mới", authorRole: "Reader", authorReputation: 50, text: "Cốt truyện hấp dẫn, suy luận logic. Tuy nhiên chương 2 hơi ngắn.", likes: 12 }
@@ -43,13 +42,11 @@ export default function App() {
   const [changePassForm, setChangePassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [changePassMsg, setChangePassMsg] = useState({ type: '', text: '' });
   
-  // Tài khoản được xác thực bởi Firebase Authentication, không lấy từ localStorage.
   const [currentUser, setCurrentUser] = useState(null);
 
   const [usersDb, setUsersDb] = useState(() => {
     const saved = localStorage.getItem('t714_users_db');
     if (saved) {
-      // Xóa mật khẩu cũ từng bị lưu dạng văn bản thường trong localStorage.
       return JSON.parse(saved).map(({ password, ...user }) => user);
     }
     return [
@@ -60,11 +57,9 @@ export default function App() {
     ];
   });
 
-  // Data State với Firebase (Books) & LocalStorage (Others)
-  const [books, setBooks] = useState([]); // Khởi tạo rỗng, sẽ tải từ Firebase
+  const [books, setBooks] = useState([]); 
   const [isFetchingBooks, setIsFetchingBooks] = useState(true);
 
-  // Theo dõi phiên đăng nhập Firebase trên mọi thiết bị.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -77,7 +72,6 @@ export default function App() {
         if (profileSnap.exists()) {
           setCurrentUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profileSnap.data() });
         } else {
-          // Không tự cấp quyền tác giả/admin cho tài khoản thiếu hồ sơ.
           setCurrentUser({ uid: firebaseUser.uid, email: firebaseUser.email, username: firebaseUser.email, role: 'Reader', reputation: 0 });
         }
       } catch (error) {
@@ -88,7 +82,6 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // Đồng bộ truyện theo thời gian thực giữa các thiết bị.
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, 'books'),
@@ -108,38 +101,42 @@ export default function App() {
     );
     return unsubscribe;
   }, []);
-// Đồng bộ chi tiết truyện đang mở khi Firebase có bản cập nhật mới
-useEffect(() => {
-  if (selectedBook) {
-    const currentLatest = books.find(b => b.id === selectedBook.id);
-    if (!currentLatest) {
-      // Tác giả đã xoá truyện này
-      setSelectedBook(null);
-    } else if (JSON.stringify(currentLatest) !== JSON.stringify(selectedBook)) {
-      // Tác giả vừa sửa nội dung chương / thông tin truyện
-      setSelectedBook(currentLatest);
+
+  const [selectedBook, setSelectedBook] = useState(null);
+  
+  useEffect(() => {
+    if (selectedBook) {
+      const currentLatest = books.find(b => b.id === selectedBook.id);
+      if (!currentLatest) {
+        setSelectedBook(null);
+      } else if (JSON.stringify(currentLatest) !== JSON.stringify(selectedBook)) {
+        setSelectedBook(currentLatest);
+      }
     }
-  }
-}, [books, selectedBook]);
+  }, [books, selectedBook]);
+
   const [reviews, setReviews] = useState([]);
   const [inlineComments, setInlineComments] = useState({});
   const [savedBookIds, setSavedBookIds] = useState({});
-  const [readingProgress, setReadingProgress] = useState({});
-  // --- CHÈN CODE BƯỚC 3 VÀO ĐÂY ---
+  
+  // Khởi tạo state kết hợp dữ liệu lưu cục bộ và đám mây
+  const [readingProgress, setReadingProgress] = useState(() => {
+    const saved = localStorage.getItem('t714_reading_progress');
+    return saved ? JSON.parse(saved) : {};
+  });
+
   useEffect(() => {
-    // 1. Kéo bài viết Diễn đàn (reviews)
     const unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
       const reviewsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setReviews(reviewsData.sort((a, b) => b.createdAt - a.createdAt));
     });
 
-    // 2. Kéo Tủ sách, Tiến trình đọc, Bình luận
     const unsubAppData = onSnapshot(doc(db, 'appData', 'globalData'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.inlineComments) setInlineComments(data.inlineComments);
         if (data.savedBookIds) setSavedBookIds(data.savedBookIds);
-        if (data.readingProgress) setReadingProgress(data.readingProgress);
+        if (data.readingProgress) setReadingProgress(prev => ({ ...prev, ...data.readingProgress }));
       } else {
         setDoc(doc(db, 'appData', 'globalData'), { inlineComments: {}, savedBookIds: {}, readingProgress: {} });
       }
@@ -147,21 +144,14 @@ useEffect(() => {
 
     return () => { unsubReviews(); unsubAppData(); };
   }, []);
-  // --- KẾT THÚC CODE BƯỚC 3 ---
-
-  const [readingProgress, setReadingProgress] = useState(() => {
-    const saved = localStorage.getItem('t714_reading_progress');
-    return saved ? JSON.parse(saved) : {};
-  });
 
   // Navigation & Modal State
-  const [selectedBook, setSelectedBook] = useState(null);
   const [readingChapterIndex, setReadingChapterIndex] = useState(null);
   const [randomBookModal, setRandomBookModal] = useState(null);
   const [showMessageModal, setShowMessageModal] = useState({ show: false, text: '' });
   const [newReviewText, setNewReviewText] = useState('');
 
-  // Creation State (Đăng Truyện)
+  // Creation State
   const [bookForm, setBookForm] = useState({ title: '', cover: '', summary: '' });
   const [formTags, setFormTags] = useState([]);
   const [customTagInput, setCustomTagInput] = useState('');
@@ -170,18 +160,11 @@ useEffect(() => {
   // Author Management State
   const [editingBook, setEditingBook] = useState(null);
 
-  // ================= TRANG VIẾT CHƯƠNG NÂNG CẤP (GOOGLE DOCS MODE) =================
   const [editorState, setEditorState] = useState({
-    active: false,
-    mode: 'create', // 'create' hoặc 'edit'
-    bookId: null,
-    chapterId: null,
-    title: '',
-    content: ''
+    active: false, mode: 'create', bookId: null, chapterId: null, title: '', content: ''
   });
   const [saveStatus, setSaveStatus] = useState('saved');
 
-  // Helpers
   const showMsg = (text) => setShowMessageModal({ show: true, text });
 
   const openChapterEditor = (mode, bookId, chapter = null) => {
@@ -219,14 +202,10 @@ useEffect(() => {
     return () => clearTimeout(timer);
   }, [editorState.title, editorState.content, editorState.active]);
 
-  // Các dữ liệu cá nhân chưa chuyển lên Cloud vẫn được lưu cục bộ.
   useEffect(() => { localStorage.setItem('t714_users_db', JSON.stringify(usersDb)); }, [usersDb]);
   
-
   const userRole = currentUser ? currentUser.role : 'Guest';
 
-  // ================= AUTH LOGIC (FIREBASE AUTHENTICATION) =================
-  // Username được ánh xạ thành email nội bộ để giữ giao diện đăng nhập bằng tên tài khoản.
   const usernameToEmail = (username) => {
     const normalized = username.trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -259,11 +238,7 @@ useEffect(() => {
         }
         const credential = await createUserWithEmailAndPassword(auth, email, authForm.password);
         const profile = {
-          username: inputName,
-          usernameKey: inputName.toLowerCase(),
-          role: 'Reader',
-          reputation: 0,
-          createdAt: new Date().toISOString()
+          username: inputName, usernameKey: inputName.toLowerCase(), role: 'Reader', reputation: 0, createdAt: new Date().toISOString()
         };
         await setDoc(doc(db, 'users', credential.user.uid), profile);
         setCurrentUser({ uid: credential.user.uid, email, ...profile });
@@ -345,7 +320,6 @@ useEffect(() => {
     return null;
   };
 
-  // ================= TỦ SÁCH =================
   const isBookSaved = (bookId) => {
     if (!currentUser) return false;
     const userSaved = savedBookIds[currentUser.username] || [];
@@ -358,13 +332,19 @@ useEffect(() => {
     let updated;
     if (userSaved.includes(bookId)) { updated = userSaved.filter(id => id !== bookId); showMsg("Đã xóa truyện khỏi Tủ sách."); } 
     else { updated = [...userSaved, bookId]; showMsg("Đã lưu truyện vào Tủ sách!"); }
-    setSavedBookIds({ ...savedBookIds, [currentUser.username]: updated });
+    
+    const newSavedData = { ...savedBookIds, [currentUser.username]: updated };
+    setSavedBookIds(newSavedData);
+    setDoc(doc(db, 'appData', 'globalData'), { savedBookIds: newSavedData }, { merge: true }).catch(console.error);
   };
 
   const saveReadingProgress = (bookId, chapterIndex) => {
     if (!currentUser) return;
     const key = `${currentUser.username}_${bookId}`;
-    setReadingProgress(prev => ({ ...prev, [key]: chapterIndex }));
+    const newProgress = { ...readingProgress, [key]: chapterIndex };
+    setReadingProgress(newProgress);
+    localStorage.setItem('t714_reading_progress', JSON.stringify(newProgress));
+    setDoc(doc(db, 'appData', 'globalData'), { readingProgress: newProgress }, { merge: true }).catch(console.error);
   };
 
   const getSavedChapterIndex = (bookId) => {
@@ -373,7 +353,6 @@ useEffect(() => {
     return readingProgress[key] !== undefined ? readingProgress[key] : 0;
   };
 
-  // ================= TƯƠNG TÁC LÊN FIREBASE =================
   const handleAddSaoSongTu = async (bookId, chapterId) => {
     if (!currentUser) { showMsg("Vui lòng đăng nhập để tặng sao!"); return; }
 
@@ -396,7 +375,6 @@ useEffect(() => {
     setBooks(books.map(b => b.id === bookId ? updatedBook : b));
     setSelectedBook(updatedBook);
     
-    // Cập nhật Firebase
     try {
       await updateDoc(doc(db, "books", bookId), { sao: updatedBook.sao, chapters: updatedBook.chapters });
     } catch (e) { console.error("Lỗi cập nhật sao", e); }
@@ -412,7 +390,6 @@ useEffect(() => {
     
     setBooks(prev => prev.map(b => b.id === bookId ? { ...b, views: updatedViews, chapters: updatedChapters } : b));
     
-    // Cập nhật ngầm Firebase
     try {
       await updateDoc(doc(db, "books", bookId), { views: updatedViews, chapters: updatedChapters });
     } catch (e) { console.error(e); }
@@ -432,7 +409,6 @@ useEffect(() => {
     setCustomTagInput('');
   };
 
-  // ================= FIREBASE CRUD (TẠO, SỬA, XÓA TRUYỆN) =================
   const handlePublish = async () => {
     if (!bookForm.title || !bookForm.summary || formTags.length === 0) {
       showMsg("Vui lòng điền đủ Tên truyện, Thể loại và Văn án!");
@@ -588,8 +564,6 @@ useEffect(() => {
     showMsg("Đã xoá bài đăng trên diễn đàn.");
   };
 
-
-  // ================= VIEW COMPONENTS =================
   const renderHome = () => {
     const topSaoBooks = [...books].sort((a, b) => (b.sao || 0) - (a.sao || 0)).slice(0, 10);
     return (
@@ -697,7 +671,9 @@ useEffect(() => {
                          onKeyDown={(e) => {
                             if(e.key === 'Enter' && e.target.value.trim()) {
                                if(!currentUser) { showMsg("Vui lòng đăng nhập để bình luận."); return; }
-                               setInlineComments({...inlineComments, [commentKey]: [...parasComments, { author: currentUser.username, authorRole: currentUser.role, authorReputation: currentUser.reputation, text: e.target.value }]});
+                               const newComments = {...inlineComments, [commentKey]: [...parasComments, { author: currentUser.username, authorRole: currentUser.role, authorReputation: currentUser.reputation, text: e.target.value }]};
+                               setInlineComments(newComments);
+                               setDoc(doc(db, 'appData', 'globalData'), { inlineComments: newComments }, { merge: true }).catch(console.error);
                                e.target.value = '';
                             }
                          }}
@@ -707,7 +683,9 @@ useEffect(() => {
                             const input = document.getElementById(`input_${commentKey}`);
                             if(input && input.value.trim()) {
                                if(!currentUser) { showMsg("Vui lòng đăng nhập để bình luận."); return; }
-                               setInlineComments({...inlineComments, [commentKey]: [...parasComments, { author: currentUser.username, authorRole: currentUser.role, authorReputation: currentUser.reputation, text: input.value }]});
+                               const newComments = {...inlineComments, [commentKey]: [...parasComments, { author: currentUser.username, authorRole: currentUser.role, authorReputation: currentUser.reputation, text: input.value }]};
+                               setInlineComments(newComments);
+                               setDoc(doc(db, 'appData', 'globalData'), { inlineComments: newComments }, { merge: true }).catch(console.error);
                                input.value = '';
                             }
                          }}
@@ -768,7 +746,6 @@ useEffect(() => {
     );
   };
 
-  // ================= ĐỊNH DẠNG TRANG VIẾT GOOGLE DOCS EDITOR =================
   if (editorState.active) {
     const wordCount = editorState.content.trim() ? editorState.content.trim().split(/\s+/).length : 0;
     const targetBook = books.find(b => b.id === editorState.bookId);
@@ -968,7 +945,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* TAB: TỦ SÁCH CỦA TÔI */}
             {activeTab === 'bookshelf' && currentUser && (
               <div className="space-y-6 max-w-5xl mx-auto">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-4 flex items-center gap-2"><Bookmark className="w-6 h-6"/> Tủ Sách Của Tôi</h2>
@@ -1007,7 +983,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* TAB: QUẢN LÝ TRUYỆN */}
             {activeTab === 'manage' && (userRole === 'Author' || userRole === 'Admin') && (
               <div className="max-w-5xl mx-auto space-y-6">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-4 flex items-center gap-2"><Settings className="w-6 h-6"/> Quản Lý Truyện Đã Đăng</h2>
@@ -1095,7 +1070,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* TAB: ĐĂNG TRUYỆN MỚI */}
             {activeTab === 'publish' && (userRole === 'Author' || userRole === 'Admin') && (
               <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 border border-[#FFDAC1]/50">
                 <h2 className="text-2xl font-black text-[#FF9AA2] mb-6 flex items-center gap-2"><PlusCircle className="w-6 h-6"/> Đăng Tác Phẩm Mới</h2>
@@ -1146,7 +1120,6 @@ useEffect(() => {
         )}
       </main>
 
-      {/* CÁC MODAL KHÁC */}
       {editingBook && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-blue-200">
