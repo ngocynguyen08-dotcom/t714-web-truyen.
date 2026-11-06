@@ -121,21 +121,33 @@ useEffect(() => {
     }
   }
 }, [books, selectedBook]);
-  const [reviews, setReviews] = useState(() => {
-    const saved = localStorage.getItem('t714_reviews');
-    return saved ? JSON.parse(saved) : INITIAL_REVIEWS;
-  });
+  const [reviews, setReviews] = useState([]);
+  const [inlineComments, setInlineComments] = useState({});
+  const [savedBookIds, setSavedBookIds] = useState({});
+  const [readingProgress, setReadingProgress] = useState({});
+  // --- CHÈN CODE BƯỚC 3 VÀO ĐÂY ---
+  useEffect(() => {
+    // 1. Kéo bài viết Diễn đàn (reviews)
+    const unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
+      const reviewsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setReviews(reviewsData.sort((a, b) => b.createdAt - a.createdAt));
+    });
 
-  const [inlineComments, setInlineComments] = useState(() => {
-    const saved = localStorage.getItem('t714_inline_comments');
-    return saved ? JSON.parse(saved) : {};
-  });
+    // 2. Kéo Tủ sách, Tiến trình đọc, Bình luận
+    const unsubAppData = onSnapshot(doc(db, 'appData', 'globalData'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.inlineComments) setInlineComments(data.inlineComments);
+        if (data.savedBookIds) setSavedBookIds(data.savedBookIds);
+        if (data.readingProgress) setReadingProgress(data.readingProgress);
+      } else {
+        setDoc(doc(db, 'appData', 'globalData'), { inlineComments: {}, savedBookIds: {}, readingProgress: {} });
+      }
+    });
 
-  // Tủ sách & Tiến trình đọc
-  const [savedBookIds, setSavedBookIds] = useState(() => {
-    const saved = localStorage.getItem('t714_saved_books');
-    return saved ? JSON.parse(saved) : {};
-  });
+    return () => { unsubReviews(); unsubAppData(); };
+  }, []);
+  // --- KẾT THÚC CODE BƯỚC 3 ---
 
   const [readingProgress, setReadingProgress] = useState(() => {
     const saved = localStorage.getItem('t714_reading_progress');
@@ -209,10 +221,7 @@ useEffect(() => {
 
   // Các dữ liệu cá nhân chưa chuyển lên Cloud vẫn được lưu cục bộ.
   useEffect(() => { localStorage.setItem('t714_users_db', JSON.stringify(usersDb)); }, [usersDb]);
-  useEffect(() => { localStorage.setItem('t714_reviews', JSON.stringify(reviews)); }, [reviews]);
-  useEffect(() => { localStorage.setItem('t714_inline_comments', JSON.stringify(inlineComments)); }, [inlineComments]);
-  useEffect(() => { localStorage.setItem('t714_saved_books', JSON.stringify(savedBookIds)); }, [savedBookIds]);
-  useEffect(() => { localStorage.setItem('t714_reading_progress', JSON.stringify(readingProgress)); }, [readingProgress]);
+  
 
   const userRole = currentUser ? currentUser.role : 'Guest';
 
