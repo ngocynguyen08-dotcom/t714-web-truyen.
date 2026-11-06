@@ -108,7 +108,19 @@ export default function App() {
     );
     return unsubscribe;
   }, []);
-
+// Đồng bộ chi tiết truyện đang mở khi Firebase có bản cập nhật mới
+useEffect(() => {
+  if (selectedBook) {
+    const currentLatest = books.find(b => b.id === selectedBook.id);
+    if (!currentLatest) {
+      // Tác giả đã xoá truyện này
+      setSelectedBook(null);
+    } else if (JSON.stringify(currentLatest) !== JSON.stringify(selectedBook)) {
+      // Tác giả vừa sửa nội dung chương / thông tin truyện
+      setSelectedBook(currentLatest);
+    }
+  }
+}, [books, selectedBook]);
   const [reviews, setReviews] = useState(() => {
     const saved = localStorage.getItem('t714_reviews');
     return saved ? JSON.parse(saved) : INITIAL_REVIEWS;
