@@ -20,24 +20,15 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const DEFAULT_LOGO_URL = "image_3c2d84.jpg";
 
-// ================= DỮ LIỆU MẪU BAN ĐẦU =================
-const INITIAL_REVIEWS = [
-  { id: 1, bookId: 2, author: "Độc giả T714", authorRole: "Reader", authorReputation: 1200, text: "Truyện quá hay, đọc mà khóc hết nước mắt. Đề cử mạnh cho mọi người nhé! Mong tác giả ra thêm ngoại truyện.", likes: 45 },
-  { id: 2, bookId: 1, author: "Người Mới", authorRole: "Reader", authorReputation: 50, text: "Cốt truyện hấp dẫn, suy luận logic. Tuy nhiên chương 2 hơi ngắn.", likes: 12 }
-];
-
 export default function App() {
-  // ================= STATE & STORAGE =================
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState('home'); 
   
-  // Auth State
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login'); 
   const [authError, setAuthError] = useState('');
   const [authForm, setAuthForm] = useState({ username: '', password: '', role: 'Reader' });
   
-  // Change Password State
   const [showChangePass, setShowChangePass] = useState(false);
   const [changePassForm, setChangePassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [changePassMsg, setChangePassMsg] = useState({ type: '', text: '' });
@@ -119,7 +110,6 @@ export default function App() {
   const [inlineComments, setInlineComments] = useState({});
   const [savedBookIds, setSavedBookIds] = useState({});
   
-  // Khởi tạo state kết hợp dữ liệu lưu cục bộ và đám mây
   const [readingProgress, setReadingProgress] = useState(() => {
     const saved = localStorage.getItem('t714_reading_progress');
     return saved ? JSON.parse(saved) : {};
@@ -145,19 +135,16 @@ export default function App() {
     return () => { unsubReviews(); unsubAppData(); };
   }, []);
 
-  // Navigation & Modal State
   const [readingChapterIndex, setReadingChapterIndex] = useState(null);
   const [randomBookModal, setRandomBookModal] = useState(null);
   const [showMessageModal, setShowMessageModal] = useState({ show: false, text: '' });
   const [newReviewText, setNewReviewText] = useState('');
 
-  // Creation State
   const [bookForm, setBookForm] = useState({ title: '', cover: '', summary: '' });
   const [formTags, setFormTags] = useState([]);
   const [customTagInput, setCustomTagInput] = useState('');
   const [chaptersForm, setChaptersForm] = useState([{ title: '', content: '' }]);
 
-  // Author Management State
   const [editingBook, setEditingBook] = useState(null);
 
   const [editorState, setEditorState] = useState({
@@ -167,19 +154,26 @@ export default function App() {
 
   const showMsg = (text) => setShowMessageModal({ show: true, text });
 
+  // === ĐÃ SỬA LỖI ĐỒNG BỘ Ở HÀM NÀY ===
   const openChapterEditor = (mode, bookId, chapter = null) => {
     const draftKey = `t714_draft_${bookId}_${chapter ? chapter.id : 'new'}`;
-    const savedDraft = localStorage.getItem(draftKey);
-
+    
     let initialTitle = chapter ? chapter.title : '';
     let initialContent = chapter ? chapter.content : '';
 
-    if (savedDraft) {
-      try {
-        const parsed = JSON.parse(savedDraft);
-        initialTitle = parsed.title || initialTitle;
-        initialContent = parsed.content || initialContent;
-      } catch (e) { console.error(e); }
+    // Chỉ load nháp cục bộ nếu đang TẠO MỚI.
+    // Nếu ĐANG SỬA, ưu tiên dữ liệu từ đám mây (Firebase) và bỏ qua nháp cũ để tránh đè dữ liệu.
+    if (mode === 'create') {
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          initialTitle = parsed.title || initialTitle;
+          initialContent = parsed.content || initialContent;
+        } catch (e) { console.error(e); }
+      }
+    } else {
+      localStorage.removeItem(draftKey);
     }
 
     setEditorState({
